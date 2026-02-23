@@ -30,105 +30,119 @@ class WeDropApp extends StatelessWidget {
           title: 'WeDrop',
           debugShowCheckedModeBanner: false,
 
-          /* ------------- LIGHT UI PACK (Vibrant Azure & Clean White) ------------- */
+          /* ------------- LIGHT UI PACK (Minimalist & Clean) ------------- */
           theme: ThemeData(
             brightness: Brightness.light,
             colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF0284C7), // Azure Blue
+              seedColor: const Color(0xFF007AFF), // iOS Blue
               brightness: Brightness.light,
-              primary: const Color(0xFF0284C7),
-              secondary: const Color(0xFF0EA5E9),
+              primary: const Color(0xFF007AFF),
+              secondary: const Color(0xFF34C759), // Green
               surface: const Color(0xFFFFFFFF),
               surfaceTint: Colors.white,
             ),
-            scaffoldBackgroundColor: const Color(0xFFF8FAFC), // Slate 50
+            scaffoldBackgroundColor: const Color(
+              0xFFF2F2F7,
+            ), // Soft grayish white
             useMaterial3: true,
             appBarTheme: const AppBarTheme(
               centerTitle: true,
               elevation: 0,
               backgroundColor: Colors.transparent,
-              foregroundColor: Color(0xFF0F172A), // Slate 900
+              foregroundColor: Colors.black,
             ),
             cardTheme: CardTheme(
-              elevation: 8,
-              shadowColor: const Color(
-                0xFF94A3B8,
-              ).withValues(alpha: 0.2), // Slate 400
+              elevation: 0,
               color: Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(24),
               ),
             ),
             listTileTheme: const ListTileThemeData(
-              iconColor: Color(0xFF0284C7),
+              iconColor: Color(0xFF007AFF),
+              contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(20)),
+              ),
             ),
             elevatedButtonTheme: ElevatedButtonThemeData(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0284C7),
+                backgroundColor: const Color(0xFF007AFF),
                 foregroundColor: Colors.white,
-                elevation: 4,
-                shadowColor: const Color(0xFF0284C7).withValues(alpha: 0.4),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(20),
                 ),
               ),
             ),
             floatingActionButtonTheme: const FloatingActionButtonThemeData(
-              backgroundColor: Color(0xFF0284C7),
+              backgroundColor: Color(0xFF007AFF),
               foregroundColor: Colors.white,
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(20)),
+              ),
             ),
           ),
 
-          /* ------------- DARK UI PACK (Midnight & Cyber Purple) ------------- */
+          /* ------------- DARK UI PACK (Minimalist True Dark) ------------- */
           darkTheme: ThemeData(
             brightness: Brightness.dark,
             colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFFA855F7), // Cyber Purple
+              seedColor: const Color(0xFF0A84FF), // Dark mode Blue
               brightness: Brightness.dark,
-              primary: const Color(0xFFA855F7),
-              secondary: const Color(0xFFD946EF), // Fuchsia
-              surface: const Color(0xFF1E293B), // Slate 800
-              surfaceTint: const Color(0xFF1E293B),
+              primary: const Color(0xFF0A84FF),
+              secondary: const Color(0xFF30D158),
+              surface: const Color(0xFF1C1C1E), // Soft dark gray
+              surfaceTint: const Color(0xFF1C1C1E),
             ),
             useMaterial3: true,
-            scaffoldBackgroundColor: const Color(
-              0xFF0F172A,
-            ), // Midnight Slate 900
+            scaffoldBackgroundColor: const Color(0xFF000000), // True black
             appBarTheme: const AppBarTheme(
               centerTitle: true,
               elevation: 0,
               backgroundColor: Colors.transparent,
-              foregroundColor: Color(0xFFF8FAFC), // Slate 50
+              foregroundColor: Colors.white,
             ),
             cardTheme: CardTheme(
-              elevation: 12,
-              shadowColor: Colors.black.withValues(alpha: 0.5),
-              color: const Color(0xFF1E293B), // Slate 800
+              elevation: 0,
+              color: const Color(0xFF1C1C1E),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-                side: BorderSide(
-                  color: const Color(0xFFA855F7).withValues(alpha: 0.2),
-                  width: 1,
-                ), // Glowing edge effect
+                borderRadius: BorderRadius.circular(24),
               ),
             ),
             listTileTheme: const ListTileThemeData(
-              iconColor: Color(0xFFA855F7),
+              iconColor: Color(0xFF0A84FF),
+              contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(20)),
+              ),
             ),
             elevatedButtonTheme: ElevatedButtonThemeData(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFA855F7), // Cyber Purple
+                backgroundColor: const Color(0xFF0A84FF),
                 foregroundColor: Colors.white,
-                elevation: 8,
-                shadowColor: const Color(0xFFA855F7).withValues(alpha: 0.5),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(20),
                 ),
               ),
             ),
             floatingActionButtonTheme: const FloatingActionButtonThemeData(
-              backgroundColor: Color(0xFFA855F7),
+              backgroundColor: Color(0xFF0A84FF),
               foregroundColor: Colors.white,
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(20)),
+              ),
             ),
           ),
           themeMode: themeProvider.themeMode,

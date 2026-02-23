@@ -96,6 +96,7 @@ class _AppPickerScreenState extends State<AppPickerScreen> {
               : _apps.isEmpty
               ? const Center(child: Text('No apps found.'))
               : ListView.builder(
+                padding: const EdgeInsets.only(top: 8, bottom: 80),
                 itemCount: _apps.length,
                 itemBuilder: (context, index) {
                   final app = _apps[index];
@@ -104,19 +105,30 @@ class _AppPickerScreenState extends State<AppPickerScreen> {
                     app.packageName,
                   );
 
-                  return ListTile(
-                    leading: Image.memory(
-                      appWithIcon.icon,
-                      width: 40,
-                      height: 40,
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16.0,
+                      vertical: 4.0,
                     ),
-                    title: Text(app.appName),
-                    subtitle: Text(app.versionName ?? ''),
-                    trailing:
-                        isSelected
-                            ? const Icon(Icons.check_circle, color: Colors.blue)
-                            : const Icon(Icons.circle_outlined),
-                    onTap: () => _toggleSelection(app),
+                    child: Card(
+                      child: ListTile(
+                        leading: Image.memory(
+                          appWithIcon.icon,
+                          width: 40,
+                          height: 40,
+                        ),
+                        title: Text(app.appName),
+                        subtitle: Text(app.versionName ?? ''),
+                        trailing:
+                            isSelected
+                                ? Icon(
+                                  Icons.check_circle,
+                                  color: Theme.of(context).colorScheme.primary,
+                                )
+                                : const Icon(Icons.circle_outlined),
+                        onTap: () => _toggleSelection(app),
+                      ),
+                    ),
                   );
                 },
               ),

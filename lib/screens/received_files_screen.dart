@@ -26,9 +26,13 @@ class _ReceivedFilesScreenState extends State<ReceivedFilesScreen> {
     try {
       Directory? baseDir;
       if (Platform.isAndroid) {
-        baseDir = Directory('/storage/emulated/0');
+        baseDir = Directory('/storage/emulated/0/Download');
         if (!await baseDir.exists()) {
-          baseDir = await getExternalStorageDirectory();
+          try {
+            await baseDir.create(recursive: true);
+          } catch (e) {
+            baseDir = await getExternalStorageDirectory();
+          }
         }
       } else {
         baseDir = await getApplicationDocumentsDirectory();
@@ -112,20 +116,6 @@ class _ReceivedFilesScreenState extends State<ReceivedFilesScreen> {
       ),
       body: Stack(
         children: [
-          // Background Gradient
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Theme.of(context).colorScheme.primary.withOpacity(0.05),
-                  Theme.of(context).scaffoldBackgroundColor,
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
-          ),
-
           SafeArea(
             child:
                 _isLoading
@@ -161,9 +151,6 @@ class _ReceivedFilesScreenState extends State<ReceivedFilesScreen> {
 
                         return Card(
                           margin: const EdgeInsets.only(bottom: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
                           child: ListTile(
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 16,

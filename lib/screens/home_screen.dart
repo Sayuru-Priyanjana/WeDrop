@@ -35,6 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Transfer state
   bool _isTransferring = false;
+  bool _transferComplete = false;
   double _progress = 0.0;
   String _transferStatus = '';
 
@@ -88,20 +89,22 @@ class _HomeScreenState extends State<HomeScreen> {
     _serverProgressSub = _fileServer.progressStream.listen((progress) {
       if (mounted) {
         setState(() {
+          if (!_isTransferring) {
+            _transferComplete = false;
+          }
           _isTransferring = true;
           _progress = progress.transferredBytes / progress.totalBytes;
-          _transferStatus =
-              'Receiving... ${progress.speedMBps.toStringAsFixed(1)} MB/s';
 
-          if (_progress >= 1.0) {
-            Future.delayed(const Duration(seconds: 1), () {
-              if (mounted) {
-                setState(() => _isTransferring = false);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Files received successfully!')),
-                );
-              }
-            });
+          final transferredMB = progress.transferredBytes / 1024 / 1024;
+          final totalMB = progress.totalBytes / 1024 / 1024;
+
+          _transferStatus =
+              'Receiving... ${progress.speedMBps.toStringAsFixed(1)} MB/s\n'
+              '${transferredMB.toStringAsFixed(1)} MB / ${totalMB.toStringAsFixed(1)} MB';
+
+          if (_progress >= 1.0 && progress.transferredBytes > 0) {
+            _transferComplete = true;
+            _transferStatus = 'Files received successfully!';
           }
         });
       }
@@ -197,6 +200,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     setState(() {
       _isTransferring = true;
+      _transferComplete = false;
       _progress = 0.0;
       _transferStatus = 'Connecting...';
     });
@@ -207,8 +211,11 @@ class _HomeScreenState extends State<HomeScreen> {
         if (mounted) {
           setState(() {
             _progress = progress.transferredBytes / progress.totalBytes;
+            final transferredMB = progress.transferredBytes / 1024 / 1024;
+            final totalMB = progress.totalBytes / 1024 / 1024;
             _transferStatus =
-                'Sending... ${progress.speedMBps.toStringAsFixed(1)} MB/s';
+                'Sending... ${progress.speedMBps.toStringAsFixed(1)} MB/s\n'
+                '${transferredMB.toStringAsFixed(1)} MB / ${totalMB.toStringAsFixed(1)} MB';
           });
         }
       });
@@ -216,22 +223,18 @@ class _HomeScreenState extends State<HomeScreen> {
       await _fileSender.sendFiles(_selectedItems, device, _deviceName);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Transfer completed successfully!')),
-        );
         setState(() {
+          _transferComplete = true;
+          _transferStatus = 'Transfer completed successfully!';
           _selectedItems.clear();
         });
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isTransferring = false);
+        setState(() {
+          _transferComplete = true;
+          _transferStatus = 'Error: $e';
+        });
       }
     }
   }
@@ -348,18 +351,11 @@ class _HomeScreenState extends State<HomeScreen> {
         final item = _selectedItems[index];
 
         return Container(
-          width: 120,
+          width: 100,
           margin: const EdgeInsets.only(right: 12),
           decoration: BoxDecoration(
             color: Theme.of(context).cardColor,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            borderRadius: BorderRadius.circular(20),
           ),
           child: Stack(
             children: [
@@ -370,13 +366,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     if (item.icon != null)
-                      Image.memory(item.icon!, width: 40, height: 40)
+                      Image.memory(item.icon!, width: 32, height: 32)
                     else
                       Icon(
                         item.type == TransferItemType.app
                             ? Icons.android
                             : Icons.insert_drive_file,
-                        size: 40,
+                        size: 32,
                         color: Theme.of(context).colorScheme.primary,
                       ),
                     const SizedBox(height: 8),
@@ -387,7 +383,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -399,13 +395,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               Positioned(
-                top: 0,
-                right: 0,
+                top: 8,
+                right: 8,
                 child: IconButton(
                   icon: const Icon(
                     Icons.cancel,
                     color: Colors.redAccent,
-                    size: 20,
+                    size: 18,
                   ),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
@@ -456,20 +452,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Stack(
         children: [
-          // Background Gradient
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                  Theme.of(context).scaffoldBackgroundColor,
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-          ),
-
           SafeArea(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -653,11 +635,27 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const CircularProgressIndicator(),
+                        if (!_transferComplete)
+                          const CircularProgressIndicator()
+                        else
+                          Icon(
+                            _transferStatus.startsWith('Error')
+                                ? Icons.error_outline
+                                : Icons.check_circle_outline,
+                            color:
+                                _transferStatus.startsWith('Error')
+                                    ? Colors.red
+                                    : Colors.green,
+                            size: 48,
+                          ),
                         const SizedBox(height: 24),
-                        const Text(
-                          'Transferring...',
-                          style: TextStyle(
+                        Text(
+                          _transferComplete
+                              ? (_transferStatus.startsWith('Error')
+                                  ? 'Transfer Failed'
+                                  : 'Transfer Complete')
+                              : 'Transferring...',
+                          style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
@@ -665,10 +663,23 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(height: 8),
                         Text(
                           _transferStatus,
+                          textAlign: TextAlign.center,
                           style: const TextStyle(color: Colors.grey),
                         ),
                         const SizedBox(height: 16),
-                        LinearProgressIndicator(value: _progress),
+                        if (!_transferComplete)
+                          LinearProgressIndicator(value: _progress),
+                        if (_transferComplete) ...[
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                _isTransferring = false;
+                              });
+                            },
+                            child: const Text('OK'),
+                          ),
+                        ],
                       ],
                     ),
                   ),

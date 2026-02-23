@@ -97,12 +97,14 @@ class FileServer {
         // Create WeDrop directory in storage
         Directory? baseDir;
         if (Platform.isAndroid) {
-          // Attempt to get public downloads or external storage root
-          baseDir = Directory(
-            '/storage/emulated/0',
-          ); // Common base, might need fallback
+          // Attempt to get public downloads folder
+          baseDir = Directory('/storage/emulated/0/Download');
           if (!await baseDir.exists()) {
-            baseDir = await getExternalStorageDirectory();
+            try {
+              await baseDir.create(recursive: true);
+            } catch (e) {
+              baseDir = await getExternalStorageDirectory();
+            }
           }
         } else {
           baseDir = await getApplicationDocumentsDirectory();
