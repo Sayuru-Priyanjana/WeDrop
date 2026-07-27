@@ -1,95 +1,312 @@
+// Package protocol defines the WeDrop v2 wire format.
+//
+// Every TCP frame is length-prefixed (4-byte big-endian length). The handshake
+// frames are plaintext JSON; everything after the handshake is an AES-256-GCM
+// sealed frame whose plaintext is JSON (or, for transfer payloads, raw bytes).
 package protocol
 
 import "encoding/json"
 
-// MessageType defines the type of a protocol message
+// Version is the protocol revision. Peers on different revisions refuse to talk
+// to each other rather than failing later with an opaque handshake error.
+const Version = 2
+
+// Ports used by every WeDrop device.
+const (
+	DiscoveryPort = 47820
+	TransportPort = 47821
+)
+
+// MessageType identifies a message on the wire.
 type MessageType string
 
 const (
-	TypeDiscovery     MessageType = "wedrop_discovery"
-	TypeHandshakeInit MessageType = "handshake_init"
-	TypeHandshakeResp MessageType = "handshake_resp"
-	TypePairingReq    MessageType = "pairing_req"
-	TypePairingResp   MessageType = "pairing_resp"
-	TypeTransferStart MessageType = "transfer_start"
-	TypeTransferChunk MessageType = "transfer_chunk"
-	TypeClipboard     MessageType = "clipboard"
-	TypeError         MessageType = "error"
+	// Discovery (UDP)
+	TypeDiscovery      MessageType = "wedrop_discovery"
+	TypeDiscoveryQuery MessageType = "wedrop_discovery_query"
+	TypeDiscoveryBye   MessageType = "wedrop_discovery_bye"
+
+	// Handshake (TCP, plaintext)
+	TypeHandshakeInit    MessageType = "handshake_init"
+	TypeHandshakeResp    MessageType = "handshake_resp"
+	TypeHandshakeConfirm MessageType = "handshake_confirm"
+
+	// Pairing (TCP, encrypted)
+	TypePairingResp MessageType = "pairing_resp"
+	TypeUnpair      MessageType = "unpair"
+
+	// Session control (TCP, encrypted)
+	TypePing       MessageType = "ping"
+	TypePong       MessageType = "pong"
+	TypeDeviceInfo MessageType = "device_info"
+
+	// Features (TCP, encrypted)
+	TypeClipboard    MessageType = "clipboard"
+	TypeNotification MessageType = "notification"
+	TypeMedia        MessageType = "media"
+	TypeMediaState   MessageType = "media_state"
+
+	// Transfer (TCP, encrypted, dedicated connection)
+	TypeTransferOffer  MessageType = "transfer_offer"
+	TypeTransferAccept MessageType = "transfer_accept"
+	TypeTransferChunk  MessageType = "transfer_chunk"
+	TypeTransferDone   MessageType = "transfer_done"
+
+	TypeError MessageType = "error"
 )
 
-// BaseMessage represents the common fields for all JSON messages
+// Intent tells the listening side what a freshly dialled connection is for, so
+// it can route the connection without guessing from the first message.
+type Intent string
+
+const (
+	// IntentPair asks to join the peer's ecosystem. The peer does not require
+	// the caller to be trusted yet, but does prompt its user for confirmation.
+	IntentPair Intent = "pair"
+	// IntentSession opens the long-lived control channel. Requires trust.
+	IntentSession Intent = "session"
+	// IntentTransfer opens a short-lived channel carrying one file. Requires trust.
+	IntentTransfer Intent = "transfer"
+)
+
+// Error codes returned in ErrorMessage.Code. These are stable strings so both
+// the Go and Dart implementations can branch on them.
+const (
+	ErrNotPaired       = "not_paired"
+	ErrKeyMismatch     = "key_mismatch"
+	ErrVersionMismatch = "version_mismatch"
+	ErrRejected        = "rejected"
+	ErrTimeout         = "timeout"
+	ErrBadSignature    = "bad_signature"
+	ErrNotPermitted    = "not_permitted"
+	ErrInternal        = "internal"
+	ErrBusy            = "busy"
+)
+
+// FormFactor is a coarse device class used for iconography and sorting.
+type FormFactor string
+
+const (
+	FormDesktop FormFactor = "desktop"
+	FormPhone   FormFactor = "phone"
+	FormTablet  FormFactor = "tablet"
+)
+
+// BaseMessage carries the fields present on every JSON message.
 type BaseMessage struct {
 	Type MessageType `json:"type"`
 }
 
-// DiscoveryMessage is broadcasted over UDP
+// DiscoveryMessage is broadcast over UDP to announce presence.
+//
+// IP is advisory: receivers overwrite it with the real UDP source address,
+// because a device behind a hotspot or with several interfaces frequently
+// cannot tell which of its own addresses the peer can actually reach.
 type DiscoveryMessage struct {
-	Type      MessageType `json:"type"`
-	Version   string      `json:"version"`
-	DeviceID  string      `json:"device_id"`
-	Name      string      `json:"name"`
-	Platform  string      `json:"platform"`
-	IP        string      `json:"ip"`
-	TCPPort   int         `json:"tcp_port"`
-	PublicKey string      `json:"public_key"`
+	Type       MessageType `json:"type"`
+	Version    int         `json:"version"`
+	DeviceID   string      `json:"device_id"`
+	Name       string      `json:"name"`
+	Platform   string      `json:"platform"`
+	FormFactor FormFactor  `json:"form_factor"`
+	IP         string      `json:"ip"`
+	TCPPort    int         `json:"tcp_port"`
+	PublicKey  string      `json:"public_key"`
 }
 
-// HandshakeInit initiates a TCP connection and key exchange
+// HandshakeInit is the first frame a dialler sends.
 type HandshakeInit struct {
-	Type            MessageType `json:"type"`
-	DeviceID        string      `json:"device_id"`
-	EphemeralPub    string      `json:"ephemeral_pub"`     // base64 X25519 public key
-	EphemeralPubSig string      `json:"ephemeral_pub_sig"` // base64 Ed25519 signature of the EphemeralPub
+	Type         MessageType `json:"type"`
+	Version      int         `json:"version"`
+	Intent       Intent      `json:"intent"`
+	DeviceID     string      `json:"device_id"`
+	Name         string      `json:"name"`
+	Platform     string      `json:"platform"`
+	FormFactor   FormFactor  `json:"form_factor"`
+	PublicKey    string      `json:"public_key"`    // base64 Ed25519 identity key
+	EphemeralPub string      `json:"ephemeral_pub"` // base64 X25519 key
+	Nonce        string      `json:"nonce"`         // base64, 16 random bytes
 }
 
-// HandshakeResp replies to a HandshakeInit
+// HandshakeResp answers a HandshakeInit and proves possession of the identity
+// key by signing the full transcript.
 type HandshakeResp struct {
-	Type            MessageType `json:"type"`
-	DeviceID        string      `json:"device_id"`
-	EphemeralPub    string      `json:"ephemeral_pub"`     // base64 X25519 public key
-	EphemeralPubSig string      `json:"ephemeral_pub_sig"` // base64 Ed25519 signature of the EphemeralPub
+	Type         MessageType `json:"type"`
+	Version      int         `json:"version"`
+	DeviceID     string      `json:"device_id"`
+	Name         string      `json:"name"`
+	Platform     string      `json:"platform"`
+	FormFactor   FormFactor  `json:"form_factor"`
+	PublicKey    string      `json:"public_key"`
+	EphemeralPub string      `json:"ephemeral_pub"`
+	Nonce        string      `json:"nonce"`
+	Signature    string      `json:"signature"` // base64 Ed25519 over the transcript
 }
 
-// PairingReq is sent to request being added to the ecosystem
-type PairingReq struct {
+// HandshakeConfirm closes the handshake with the dialler's transcript signature.
+type HandshakeConfirm struct {
 	Type      MessageType `json:"type"`
-	DeviceID  string      `json:"device_id"`
-	Name      string      `json:"name"`
-	PublicKey string      `json:"public_key"`
+	Signature string      `json:"signature"`
 }
 
-// PairingResp is the response to a pairing request
+// PairingResp is sent (encrypted) by the accepting side once its user decides.
 type PairingResp struct {
 	Type     MessageType `json:"type"`
 	DeviceID string      `json:"device_id"`
+	Name     string      `json:"name"`
 	Accepted bool        `json:"accepted"`
+	Reason   string      `json:"reason,omitempty"`
 }
 
-// TransferStart initiates a file transfer
-type TransferStart struct {
+// Unpair tells a peer we removed it, so it can drop us too.
+type Unpair struct {
+	Type     MessageType `json:"type"`
+	DeviceID string      `json:"device_id"`
+}
+
+// Ping and Pong keep Wi-Fi power-save state alive and detect dead peers.
+type Ping struct {
+	Type MessageType `json:"type"`
+	Seq  int64       `json:"seq"`
+}
+
+// Pong answers a Ping with the same sequence number.
+type Pong struct {
+	Type MessageType `json:"type"`
+	Seq  int64       `json:"seq"`
+}
+
+// Capability names shared by both implementations.
+const (
+	CapClipboard     = "clipboard"
+	CapFiles         = "files"
+	CapNotifications = "notifications"
+	CapMedia         = "media"
+)
+
+// DeviceInfo is exchanged right after a session opens and whenever the user
+// renames a device or toggles a capability.
+type DeviceInfo struct {
 	Type       MessageType `json:"type"`
+	DeviceID   string      `json:"device_id"`
+	Name       string      `json:"name"`
+	Platform   string      `json:"platform"`
+	FormFactor FormFactor  `json:"form_factor"`
+	// Capabilities the peer is willing to serve. A missing capability means
+	// "do not send me this", so senders can skip work instead of being refused.
+	Capabilities []string `json:"capabilities"`
+	Battery      int      `json:"battery"` // 0-100, -1 when unknown
+}
+
+// HasCapability reports whether the peer advertised the given capability.
+func (d *DeviceInfo) HasCapability(cap string) bool {
+	for _, c := range d.Capabilities {
+		if c == cap {
+			return true
+		}
+	}
+	return false
+}
+
+// ClipboardMessage carries clipboard text. Origin and Hash let a device ignore
+// an echo of its own content when several devices relay to each other.
+type ClipboardMessage struct {
+	Type     MessageType `json:"type"`
+	Text     string      `json:"text"`
+	Origin   string      `json:"origin"`   // device_id that first copied it
+	Sequence int64       `json:"sequence"` // monotonic per origin
+	Hash     string      `json:"hash"`     // sha256 of Text
+}
+
+// NotificationMessage mirrors a notification from one device to another.
+type NotificationMessage struct {
+	Type     MessageType `json:"type"`
+	ID       string      `json:"id"`
+	App      string      `json:"app"`
+	Title    string      `json:"title"`
+	Body     string      `json:"body"`
+	Time     int64       `json:"time"` // unix millis
+	Dismiss  bool        `json:"dismiss,omitempty"`
+	Category string      `json:"category,omitempty"`
+}
+
+// Media commands understood by every platform.
+const (
+	MediaPlayPause = "play_pause"
+	MediaNext      = "next"
+	MediaPrev      = "prev"
+	MediaStop      = "stop"
+	MediaVolUp     = "vol_up"
+	MediaVolDown   = "vol_down"
+	MediaMute      = "mute"
+)
+
+// MediaMessage asks the peer to act on its currently playing media.
+type MediaMessage struct {
+	Type    MessageType `json:"type"`
+	Command string      `json:"command"`
+}
+
+// MediaState reports what the peer is playing, so remotes can render a UI.
+type MediaState struct {
+	Type    MessageType `json:"type"`
+	Playing bool        `json:"playing"`
+	Title   string      `json:"title"`
+	Artist  string      `json:"artist"`
+	App     string      `json:"app"`
+	Volume  int         `json:"volume"` // 0-100, -1 when unknown
+}
+
+// TransferOffer announces an incoming file on a dedicated transfer connection.
+type TransferOffer struct {
+	Type       MessageType `json:"type"`
+	TransferID string      `json:"transfer_id"`
 	Filename   string      `json:"filename"`
 	Size       int64       `json:"size"`
-	Checksum   string      `json:"checksum"` // SHA256
+	Checksum   string      `json:"checksum"` // hex SHA-256 of the whole file
+	MimeType   string      `json:"mime_type,omitempty"`
+	ChunkSize  int         `json:"chunk_size"`
 	ChunkCount int         `json:"chunk_count"`
 }
 
-// TransferChunk represents metadata for a file chunk.
-// The actual chunk data will follow this message as raw encrypted bytes to save overhead.
+// TransferAccept is the receiver's verdict on a TransferOffer.
+type TransferAccept struct {
+	Type       MessageType `json:"type"`
+	TransferID string      `json:"transfer_id"`
+	Accepted   bool        `json:"accepted"`
+	Reason     string      `json:"reason,omitempty"`
+}
+
+// TransferChunk is the header for one chunk. The chunk bytes follow as the very
+// next encrypted frame, which keeps the JSON small and avoids base64 bloat.
 type TransferChunk struct {
-	Type     MessageType `json:"type"`
-	Filename string      `json:"filename"`
-	Index    int         `json:"index"`
-	Size     int         `json:"size"` // Size of the encrypted chunk payload to follow
+	Type       MessageType `json:"type"`
+	TransferID string      `json:"transfer_id"`
+	Index      int         `json:"index"`
+	Size       int         `json:"size"`
 }
 
-// ClipboardMessage shares clipboard text
-type ClipboardMessage struct {
-	Type MessageType `json:"type"`
-	Text string      `json:"text"`
+// TransferDone ends a transfer and repeats the checksum for verification.
+type TransferDone struct {
+	Type       MessageType `json:"type"`
+	TransferID string      `json:"transfer_id"`
+	Checksum   string      `json:"checksum"`
 }
 
-// ParseMessage decodes the base type of a message
+// ErrorMessage is sent before closing a connection so the other end can show a
+// useful reason instead of "connection reset by peer".
+type ErrorMessage struct {
+	Type    MessageType `json:"type"`
+	Code    string      `json:"code"`
+	Message string      `json:"message"`
+}
+
+// NewError builds an ErrorMessage.
+func NewError(code, message string) ErrorMessage {
+	return ErrorMessage{Type: TypeError, Code: code, Message: message}
+}
+
+// ParseMessageType decodes just the discriminator of a JSON message.
 func ParseMessageType(data []byte) (MessageType, error) {
 	var base BaseMessage
 	if err := json.Unmarshal(data, &base); err != nil {

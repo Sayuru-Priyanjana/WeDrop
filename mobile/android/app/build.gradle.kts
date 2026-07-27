@@ -6,7 +6,11 @@ plugins {
 
 android {
     namespace = "com.example.mobile"
-    compileSdk = flutter.compileSdkVersion
+    // file_picker's plugin chain (flutter_plugin_android_lifecycle) requires
+    // compiling against API 36; Flutter's default here is still 34. compileSdk
+    // only controls which APIs are available at build time, independent of
+    // targetSdk/minSdk, so raising it is safe.
+    compileSdk = maxOf(flutter.compileSdkVersion, 36)
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -15,11 +19,11 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.mobile"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // The foreground-service data-sync type and the notification listener
+        // both need APIs introduced in 24, so the floor is raised from whatever
+        // Flutter defaults to.
+        minSdk = maxOf(flutter.minSdkVersion, 24)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -42,4 +46,11 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // NotificationCompat and the foreground-service helpers used by the Kotlin
+    // side. Flutter's own AndroidX transitive versions are not guaranteed, so
+    // the one we compile against is pinned explicitly.
+    implementation("androidx.core:core-ktx:1.13.1")
 }

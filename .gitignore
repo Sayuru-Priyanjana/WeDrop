@@ -1,0 +1,48 @@
+# Go
+/core/**/*.exe
+/core/**/*.exe~
+/core/**/*.dll
+/core/**/*.so
+/core/**/*.dylib
+/core/**/*.test
+/core/**/*.out
+
+# Wails
+/desktop/build/bin/
+/desktop/build/obj/
+/desktop/frontend/node_modules/
+/desktop/frontend/dist/
+/desktop/frontend/wailsjs/
+
+# Flutter/Dart
+/mobile/.dart_tool/
+/mobile/.flutter-plugins
+/mobile/.flutter-plugins-dependencies
+/mobile/.pub-cache/
+/mobile/.pub/
+/mobile/build/
+/mobile/ios/Flutter/.last_build_id
+/mobile/ios/Flutter/App.framework
+/mobile/ios/Flutter/Flutter.framework
+/mobile/ios/Flutter/Flutter.podspec
+/mobile/ios/Flutter/Generated.xcconfig
+/mobile/ios/Flutter/app.flx
+/mobile/ios/Flutter/app.zip
+/mobile/ios/Flutter/flutter_assets/
+/mobile/ios/Flutter/flutter_export_environment.sh
+/mobile/android/app/src/main/assets/flutter_assets/
+/mobile/android/app/src/main/res/mipmap-*/
+/mobile/android/local.properties
+
+# IDEs and Tools
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+
+# Agent Config
+.gemini/

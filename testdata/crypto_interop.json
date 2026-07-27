@@ -1,0 +1,9 @@
+{
+  "key": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+  "plaintext": "hello from the ecosystem",
+  "shared_secret": "2a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748ab",
+  "nonce_client": "aabbccddeeff00112233445566778899",
+  "nonce_server": "99887766554433221100ffeeddccbbaa",
+  "expected_session": "96d75b88c5a8d1eb4a8bd81ca0376d7cef2348d1fac2c29224e761c33f7977c9",
+  "expected_code": "459445"
+}

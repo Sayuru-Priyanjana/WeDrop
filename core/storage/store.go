@@ -67,8 +67,26 @@ func (s *Store) SaveEncryptedJSON(filename string, data interface{}) error {
 		return err
 	}
 
+	return s.writeAtomic(filename, ciphertext)
+}
+
+// writeAtomic writes to a sibling temporary file and renames it into place.
+//
+// A plain WriteFile truncates first, so losing power (or being killed while
+// closing) between truncate and write leaves a zero-length file — and for the
+// trust store that silently empties the user's entire ecosystem.
+func (s *Store) writeAtomic(filename string, data []byte) error {
 	path := filepath.Join(s.BaseDir, filename)
-	return os.WriteFile(path, ciphertext, 0600)
+	tmp := path + ".tmp"
+
+	if err := os.WriteFile(tmp, data, 0600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 // LoadEncryptedJSON reads an encrypted file, decrypts it, and unmarshals it
@@ -93,8 +111,7 @@ func (s *Store) SaveJSON(filename string, data interface{}) error {
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(s.BaseDir, filename)
-	return os.WriteFile(path, jsonData, 0600)
+	return s.writeAtomic(filename, jsonData)
 }
 
 // LoadJSON reads a file and unmarshals it without decryption

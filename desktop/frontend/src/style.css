@@ -1,19 +1,196 @@
 @import "tailwindcss";
 
+/* WeDrop's design tokens. A single dark palette with one accent hue keeps the
+   interface calm — this is a utility that sits in the background, not a
+   dashboard competing for attention. */
 @theme {
-  --color-background: #0B0F19;
-  --color-surface: #151A2B;
-  --color-primary: #3B82F6;
-  --color-secondary: #8B5CF6;
-  --color-text: #F8FAFC;
-  --color-text-muted: #94A3B8;
+  --color-bg: #080b14;
+  --color-bg-soft: #0d1220;
+  --color-surface: #121829;
+  --color-surface-hi: #1a2236;
+  --color-border: #232c45;
+  --color-border-hi: #2f3a58;
+
+  --color-brand: #4f7cff;
+  --color-brand-soft: #6d92ff;
+  --color-accent: #9b6bff;
+  --color-success: #2fce8f;
+  --color-warn: #f2b544;
+  --color-danger: #f2555a;
+
+  --color-ink: #eef2ff;
+  --color-ink-dim: #9aa6c4;
+  --color-ink-faint: #6b7699;
+
+  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
 }
 
 body {
-  background-color: var(--color-background);
-  color: var(--color-text);
-  font-family: system-ui, -apple-system, sans-serif;
-  -webkit-font-smoothing: antialiased;
   margin: 0;
-  padding: 0;
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  /* The window chrome is the app; nothing should rubber-band or select. */
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Text the user may genuinely want to copy opts back in. */
+.selectable {
+  user-select: text;
+  cursor: text;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input,
+select {
+  font-family: inherit;
+}
+
+/* A slim scrollbar that does not intrude on the dark surfaces. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-hi);
+  background-clip: content-box;
+}
+
+/* --- Animations ------------------------------------------------------- */
+
+@keyframes wd-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes wd-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes wd-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes wd-pulse-ring {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.7;
+  }
+  70% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes wd-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+.wd-fade-up {
+  animation: wd-fade-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.wd-fade-in {
+  animation: wd-fade-in 0.25s ease both;
+}
+
+.wd-scale-in {
+  animation: wd-scale-in 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* The halo behind an online device's icon. */
+.wd-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 2px solid var(--color-success);
+  animation: wd-pulse-ring 2.4s ease-out infinite;
+  pointer-events: none;
+}
+
+/* Indeterminate shimmer used while a transfer has no byte count yet. */
+.wd-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.wd-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 33%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--color-brand) 55%, transparent),
+    transparent
+  );
+  animation: wd-sweep 1.4s ease-in-out infinite;
+}
+
+/* Respect a user who has asked the OS for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

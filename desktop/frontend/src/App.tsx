@@ -1,230 +1,486 @@
-import { useState, useEffect } from 'react';
-import { 
-  GetDevices, GetTrustedDevices, RequestPairing, AcceptPairing, RejectPairing, 
-  RemoveTrustedDevice, GetSettings, SetAutoSyncClipboard, SelectFile, SendFile 
-} from '../wailsjs/go/main/WeDropService';
-import { protocol, storage } from '../wailsjs/go/models';
-import { EventsOn } from '../wailsjs/runtime/runtime';
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ChooseDownloadDir,
+  ClearClipboardHistory,
+  ClearNotifications,
+  CopyToClipboard,
+  GetDiagnostics,
+  GetState,
+  MarkNotificationsRead,
+  OpenDownloadsFolder,
+  PairDevice,
+  PushClipboard,
+  RespondToPairing,
+  RespondToTransfer,
+  RevealFile,
+  SelectFiles,
+  SendFiles,
+  SendMediaCommand,
+  SetDeviceName,
+  SetDevicePermission,
+  UnpairDevice,
+  UpdateSettings,
+} from "../wailsjs/go/main/WeDropService";
+import type { main, storage } from "../wailsjs/go/models";
+import { EventsOn } from "../wailsjs/runtime/runtime";
 
-function App() {
-  const [devices, setDevices] = useState<protocol.DiscoveryMessage[]>([]);
-  const [trustedDevices, setTrustedDevices] = useState<storage.TrustedDevice[]>([]);
-  const [settings, setSettings] = useState<storage.DeviceConfig | null>(null);
-  
-  const [activeTab, setActiveTab] = useState<'devices' | 'transfers' | 'settings'>('devices');
-  const [pairingRequest, setPairingRequest] = useState<protocol.PairingReq | null>(null);
+import { DiscoveredDeviceCard, PairedDeviceCard } from "./components/DeviceCard";
+import {
+  ConfirmUnpairModal,
+  IncomingFileModal,
+  OutgoingPairingModal,
+  PairingRequestModal,
+} from "./components/Modals";
+import { ClipboardPanel, NotificationsPanel, TransfersPanel } from "./components/Panels";
+import { SettingsPanel } from "./components/SettingsPanel";
+import { Toasts, type Toast } from "./components/Toasts";
+import { Badge, Button, EmptyState, SectionTitle } from "./components/ui";
+import {
+  IconBell,
+  IconClipboard,
+  IconDevices,
+  IconRadar,
+  IconSettings,
+  IconTransfer,
+  deviceIcon,
+} from "./lib/icons";
+import { errorMessage } from "./lib/format";
 
-  useEffect(() => {
-    GetSettings().then(setSettings);
+type Tab = "devices" | "transfers" | "clipboard" | "notifications" | "settings";
 
-    const interval = setInterval(() => {
-      GetDevices().then(result => {
-        if (result) setDevices(result);
-      });
-      GetTrustedDevices().then(result => {
-        if (result) setTrustedDevices(result);
-      });
-    }, 2000);
+const TABS: { id: Tab; label: string; icon: typeof IconDevices }[] = [
+  { id: "devices", label: "Ecosystem", icon: IconDevices },
+  { id: "transfers", label: "Transfers", icon: IconTransfer },
+  { id: "clipboard", label: "Clipboard", icon: IconClipboard },
+  { id: "notifications", label: "Notifications", icon: IconBell },
+  { id: "settings", label: "Settings", icon: IconSettings },
+];
 
-    const unsubPairing = EventsOn("pairing_request", (req: protocol.PairingReq) => {
-      setPairingRequest(req);
-    });
+export default function App() {
+  const [state, setState] = useState<main.AppState | null>(null);
+  const [tab, setTab] = useState<Tab>("devices");
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [pairingWith, setPairingWith] = useState<string | null>(null);
+  const [outgoing, setOutgoing] = useState<{ name: string; code: string } | null>(null);
+  const [incomingFile, setIncomingFile] = useState<main.TransferView | null>(null);
+  const [unpairTarget, setUnpairTarget] = useState<main.DeviceView | null>(null);
+  const [diagnostics, setDiagnostics] = useState<main.Diagnostics | null>(null);
 
-    return () => {
-      clearInterval(interval);
-      unsubPairing();
-    };
+  const toastId = useRef(0);
+
+  const pushToast = useCallback((level: string, message: string) => {
+    toastId.current += 1;
+    const toast = { id: toastId.current, level, message };
+    // Cap the stack so a burst of events cannot cover the whole window.
+    setToasts((current) => [...current.slice(-3), toast]);
   }, []);
 
-  const handleSendFile = async (deviceId: string) => {
-    try {
-      const filePath = await SelectFile();
-      if (!filePath) return;
-      setActiveTab('transfers');
-      await SendFile(deviceId, filePath);
-      alert('Transfer complete!');
-    } catch (err) {
-      alert('Transfer failed: ' + err);
-    }
-  };
+  const dismissToast = useCallback((id: number) => {
+    setToasts((current) => current.filter((t) => t.id !== id));
+  }, []);
 
-  const handleRequestPairing = async (deviceId: string) => {
-    try {
-      await RequestPairing(deviceId);
-      alert('Pairing accepted! Device added to Ecosystem.');
-    } catch (err) {
-      alert('Pairing failed or rejected by peer.');
-    }
-  };
+  const refresh = useCallback(() => {
+    GetState()
+      .then(setState)
+      .catch(() => {
+        /* the backend is still starting; the next event will bring state */
+      });
+  }, []);
 
-  const untrustedDevices = devices.filter(
-    d => !trustedDevices.some(td => td.device_id === d.device_id) && d.device_id !== settings?.device_id
+  useEffect(() => {
+    refresh();
+
+    // The backend pushes a coalesced snapshot whenever anything changes, so the
+    // UI does not poll. The slow interval below is only a safety net in case an
+    // event is missed while the window is hidden.
+    const unsubscribers = [
+      EventsOn("state", (next: main.AppState) => setState(next)),
+      EventsOn("toast", (payload: { level: string; message: string }) =>
+        pushToast(payload.level, payload.message),
+      ),
+      EventsOn("pairing:outgoing", (payload: { name: string; verification_code: string }) =>
+        setOutgoing({ name: payload.name, code: payload.verification_code }),
+      ),
+      EventsOn("transfer:incoming", (transfer: main.TransferView) => setIncomingFile(transfer)),
+      EventsOn("transfer:progress", (transfer: main.TransferView) => {
+        setState((current) => {
+          if (!current) return current;
+          const transfers = current.transfers.some((t) => t.id === transfer.id)
+            ? current.transfers.map((t) => (t.id === transfer.id ? transfer : t))
+            : [transfer, ...current.transfers];
+          return { ...current, transfers } as main.AppState;
+        });
+      }),
+      EventsOn("clipboard:received", (from: string) => pushToast("info", `Clipboard from ${from}`)),
+    ];
+
+    const safetyNet = setInterval(refresh, 15000);
+
+    return () => {
+      unsubscribers.forEach((off) => off());
+      clearInterval(safetyNet);
+    };
+  }, [refresh, pushToast]);
+
+  // Clear the unread badge the moment the user actually looks at the feed.
+  useEffect(() => {
+    if (tab === "notifications" && state?.notifications.some((n) => !n.read)) {
+      MarkNotificationsRead();
+    }
+  }, [tab, state?.notifications]);
+
+  const run = useCallback(
+    async (action: Promise<unknown>, success?: string) => {
+      try {
+        await action;
+        if (success) pushToast("success", success);
+      } catch (err) {
+        pushToast("error", errorMessage(err));
+      }
+    },
+    [pushToast],
   );
 
+  const handlePair = async (deviceId: string) => {
+    setPairingWith(deviceId);
+    try {
+      await PairDevice(deviceId);
+    } catch (err) {
+      pushToast("error", errorMessage(err));
+    } finally {
+      setPairingWith(null);
+      setOutgoing(null);
+    }
+  };
+
+  const handleSendFiles = async (deviceId: string) => {
+    try {
+      const paths = await SelectFiles();
+      if (!paths || paths.length === 0) return;
+      setTab("transfers");
+      await SendFiles(deviceId, paths);
+    } catch (err) {
+      pushToast("error", errorMessage(err));
+    }
+  };
+
+  const loadDiagnostics = useCallback(() => {
+    GetDiagnostics()
+      .then(setDiagnostics)
+      .catch(() => undefined);
+  }, []);
+
+  if (!state) return <SplashScreen />;
+  if (state.error) return <StartupError message={state.error} />;
+
+  const unreadCount = state.notifications.filter((n) => !n.read).length;
+  const activeTransfers = state.transfers.filter((t) => t.state === "active").length;
+
   return (
-    <div className="h-screen w-screen flex bg-background text-text overflow-hidden font-sans">
-      {/* Sidebar */}
-      <div className="w-64 bg-surface/80 backdrop-blur-md border-r border-white/5 flex flex-col p-6 shadow-2xl relative z-20">
-        <div className="flex items-center gap-3 mb-12">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg shadow-primary/20">
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
-          </div>
-          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">WeDrop</h1>
+    <div className="flex h-screen w-screen overflow-hidden bg-bg text-ink">
+      <Sidebar
+        tab={tab}
+        onTab={setTab}
+        self={state.self}
+        connected={state.paired.filter((d) => d.connected).length}
+        paired={state.paired.length}
+        unread={unreadCount}
+        activeTransfers={activeTransfers}
+      />
+
+      <main className="relative flex-1 overflow-y-auto">
+        {/* A soft glow anchors the layout without competing with content. */}
+        <div className="pointer-events-none absolute -top-40 right-0 h-[420px] w-[420px] rounded-full bg-brand/12 blur-[130px]" />
+
+        <div className="relative mx-auto max-w-5xl px-10 py-9">
+          {tab === "devices" && (
+            <DevicesTab
+              state={state}
+              pairingWith={pairingWith}
+              onPair={handlePair}
+              onSendFiles={handleSendFiles}
+              onUnpair={setUnpairTarget}
+              onPermission={(id, cap, allowed) => run(SetDevicePermission(id, cap, allowed))}
+              onMedia={(id, command) => run(SendMediaCommand(id, command))}
+            />
+          )}
+
+          {tab === "transfers" && (
+            <TransfersPanel
+              transfers={state.transfers}
+              onReveal={(path) => run(RevealFile(path))}
+              onOpenFolder={() => run(OpenDownloadsFolder())}
+            />
+          )}
+
+          {tab === "clipboard" && (
+            <ClipboardPanel
+              entries={state.clipboard}
+              autoSync={state.settings.auto_sync_clipboard}
+              onPush={() => run(PushClipboard(), "Clipboard sent")}
+              onCopy={(text) => run(CopyToClipboard(text), "Copied")}
+              onClear={() => ClearClipboardHistory()}
+            />
+          )}
+
+          {tab === "notifications" && (
+            <NotificationsPanel
+              notifications={state.notifications}
+              onClear={() => ClearNotifications()}
+            />
+          )}
+
+          {tab === "settings" && (
+            <SettingsPanel
+              state={state}
+              diagnostics={diagnostics}
+              onRefreshDiagnostics={loadDiagnostics}
+              onUpdate={(settings: storage.Settings) => run(UpdateSettings(settings))}
+              onRename={(name) => run(SetDeviceName(name), "Device renamed")}
+              onChooseFolder={() => run(ChooseDownloadDir())}
+            />
+          )}
         </div>
+      </main>
 
-        <nav className="flex flex-col gap-2">
-          <button onClick={() => setActiveTab('devices')} className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${activeTab === 'devices' ? 'bg-primary/10 text-primary font-medium shadow-sm' : 'text-textMuted hover:bg-white/5 hover:text-white'}`}>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-            Ecosystem
-          </button>
-          <button onClick={() => setActiveTab('transfers')} className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${activeTab === 'transfers' ? 'bg-primary/10 text-primary font-medium shadow-sm' : 'text-textMuted hover:bg-white/5 hover:text-white'}`}>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
-            Transfers
-          </button>
-          <button onClick={() => setActiveTab('settings')} className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${activeTab === 'settings' ? 'bg-primary/10 text-primary font-medium shadow-sm' : 'text-textMuted hover:bg-white/5 hover:text-white'}`}>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-            Settings
-          </button>
-        </nav>
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col p-10 relative z-0 overflow-y-auto">
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/20 rounded-full blur-[120px] -z-10 pointer-events-none translate-x-1/3 -translate-y-1/3"></div>
-        
-        {activeTab === 'devices' && (
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <h2 className="text-3xl font-light mb-8">My <span className="font-semibold text-white">Ecosystem</span></h2>
-            
-            {/* Ecosystem Devices */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-              {trustedDevices.length === 0 ? (
-                <div className="col-span-full p-8 border border-dashed border-white/10 rounded-3xl bg-surface/30">
-                  <p className="text-textMuted font-medium text-center">No paired devices. Discover devices on the radar below to add them.</p>
-                </div>
-              ) : (
-                trustedDevices.map(device => {
-                  const isOnline = devices.some(d => d.device_id === device.device_id);
-                  return (
-                  <div key={device.device_id} className="group relative bg-surface border border-primary/20 shadow-lg shadow-primary/5 rounded-3xl p-6 transition-all duration-300">
-                    <div className="absolute top-4 right-4 flex gap-2">
-                      <button onClick={() => handleSendFile(device.device_id)} className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center hover:bg-primary/40 transition">
-                        <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                      </button>
-                      <button onClick={() => RemoveTrustedDevice(device.device_id)} className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center hover:bg-red-500/30 transition">
-                        <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                      </button>
-                    </div>
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/30 to-secondary/10 border border-primary/20 flex items-center justify-center mb-6">
-                      <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-                    </div>
-                    <h3 className="text-xl font-semibold mb-1">{device.name}</h3>
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-gray-500'}`}></span>
-                      <p className="text-sm text-textMuted">{isOnline ? 'Online & Synced' : 'Offline'}</p>
-                    </div>
-                  </div>
-                )})
-              )}
-            </div>
-
-            {/* Radar */}
-            <h2 className="text-2xl font-light mb-6">Nearby <span className="font-semibold text-white">Radar</span></h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {untrustedDevices.length === 0 ? (
-                <div className="col-span-full flex flex-col items-center justify-center p-12 border border-dashed border-white/10 rounded-3xl bg-surface/30">
-                  <p className="text-textMuted font-medium text-center">Scanning for untrusted devices...</p>
-                </div>
-              ) : (
-                untrustedDevices.map(device => (
-                  <div key={device.device_id} className="group relative bg-surface border border-white/5 rounded-3xl p-6 transition-all duration-300">
-                    <button onClick={() => handleRequestPairing(device.device_id)} className="absolute top-4 right-4 text-xs font-medium bg-primary text-white px-3 py-1.5 rounded-full shadow-lg shadow-primary/30 hover:bg-primary/90 transition">
-                      Add to Ecosystem
-                    </button>
-                    <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-6">
-                      <svg className="w-7 h-7 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-                    </div>
-                    <h3 className="text-xl font-semibold mb-1">{device.name}</h3>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm text-textMuted">{device.platform} • Untrusted</p>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'settings' && settings && (
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-2xl">
-            <h2 className="text-3xl font-light mb-8">System <span className="font-semibold text-white">Settings</span></h2>
-            
-            <div className="bg-surface border border-white/5 rounded-3xl p-8 mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <h3 className="text-xl font-medium">Auto Sync Clipboard</h3>
-                  <p className="text-textMuted text-sm mt-1">Automatically copy clipboard contents across all trusted Ecosystem devices.</p>
-                </div>
-                <button 
-                  onClick={() => {
-                    const newVal = !settings.auto_sync_clipboard;
-                    SetAutoSyncClipboard(newVal);
-                    setSettings({...settings, auto_sync_clipboard: newVal});
-                  }}
-                  className={`w-14 h-8 rounded-full transition-colors relative ${settings.auto_sync_clipboard ? 'bg-primary' : 'bg-white/10'}`}
-                >
-                  <div className={`w-6 h-6 rounded-full bg-white absolute top-1 transition-all ${settings.auto_sync_clipboard ? 'left-7' : 'left-1'}`}></div>
-                </button>
-              </div>
-            </div>
-            
-            <div className="bg-surface border border-white/5 rounded-3xl p-8">
-              <h3 className="text-xl font-medium mb-4">Device Identity</h3>
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm text-textMuted mb-1">Device Name</p>
-                  <p className="font-mono bg-black/20 p-3 rounded-lg border border-white/5">{settings.name}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-textMuted mb-1">Public Key (Identity)</p>
-                  <p className="font-mono text-xs break-all bg-black/20 p-3 rounded-lg border border-white/5">{settings.public_key}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Pairing Modal */}
-      {pairingRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-surface border border-primary/30 shadow-2xl rounded-3xl p-8 max-w-sm w-full mx-4 text-center">
-            <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-6">
-              <svg className="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" /></svg>
-            </div>
-            <h3 className="text-2xl font-semibold mb-2">Pairing Request</h3>
-            <p className="text-textMuted mb-8">
-              <strong className="text-white">{pairingRequest.name}</strong> wants to join your Ecosystem. Do you trust this device?
-            </p>
-            <div className="flex gap-4">
-              <button 
-                onClick={() => { RejectPairing(pairingRequest.device_id); setPairingRequest(null); }}
-                className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 transition font-medium"
-              >
-                Reject
-              </button>
-              <button 
-                onClick={() => { AcceptPairing(pairingRequest.device_id); setPairingRequest(null); }}
-                className="flex-1 py-3 rounded-xl bg-primary hover:bg-primary/90 text-white transition font-medium shadow-lg shadow-primary/20"
-              >
-                Accept
-              </button>
-            </div>
-          </div>
-        </div>
+      {state.pairing && (
+        <PairingRequestModal
+          prompt={state.pairing}
+          onRespond={(deviceId, accept) => run(RespondToPairing(deviceId, accept))}
+        />
       )}
+
+      {outgoing && !state.pairing && (
+        <OutgoingPairingModal
+          name={outgoing.name}
+          code={outgoing.code}
+          onCancel={() => setOutgoing(null)}
+        />
+      )}
+
+      {incomingFile && (
+        <IncomingFileModal
+          transfer={incomingFile}
+          onRespond={(transferId, accept) => {
+            setIncomingFile(null);
+            run(RespondToTransfer(transferId, accept));
+          }}
+        />
+      )}
+
+      {unpairTarget && (
+        <ConfirmUnpairModal
+          device={unpairTarget}
+          onCancel={() => setUnpairTarget(null)}
+          onConfirm={() => {
+            const target = unpairTarget;
+            setUnpairTarget(null);
+            run(UnpairDevice(target.device_id), `${target.name} removed`);
+          }}
+        />
+      )}
+
+      <Toasts toasts={toasts} onDismiss={dismissToast} />
     </div>
-  )
+  );
 }
 
-export default App
+function Sidebar({
+  tab,
+  onTab,
+  self,
+  connected,
+  paired,
+  unread,
+  activeTransfers,
+}: {
+  tab: Tab;
+  onTab: (tab: Tab) => void;
+  self: main.DeviceView;
+  connected: number;
+  paired: number;
+  unread: number;
+  activeTransfers: number;
+}) {
+  const SelfGlyph = deviceIcon(self.form_factor);
+
+  return (
+    <aside className="flex w-[248px] shrink-0 flex-col border-r border-border bg-bg-soft/80 px-5 py-7">
+      <div className="mb-9 flex items-center gap-3 px-1">
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-accent shadow-lg shadow-brand/25">
+          <svg
+            viewBox="0 0 24 24"
+            className="h-5 w-5 text-white"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 3v12M7.5 10.5L12 15l4.5-4.5M5 19h14" />
+          </svg>
+        </div>
+        <div>
+          <h1 className="text-[17px] font-semibold tracking-tight">WeDrop</h1>
+          <p className="text-[11.5px] text-ink-faint">
+            {connected} of {paired} connected
+          </p>
+        </div>
+      </div>
+
+      <nav className="flex flex-1 flex-col gap-1">
+        {TABS.map(({ id, label, icon: Glyph }) => {
+          const badge = id === "notifications" ? unread : id === "transfers" ? activeTransfers : 0;
+          const active = tab === id;
+          return (
+            <button
+              key={id}
+              onClick={() => onTab(id)}
+              className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-[13.5px] transition-all duration-200 ${
+                active
+                  ? "bg-brand/12 font-medium text-brand-soft"
+                  : "text-ink-dim hover:bg-surface-hi hover:text-ink"
+              }`}
+            >
+              <Glyph className="h-[18px] w-[18px]" />
+              <span className="flex-1 text-left">{label}</span>
+              {badge > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-semibold text-white">
+                  {badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="mt-6 flex items-center gap-3 rounded-2xl border border-border bg-surface/60 px-3.5 py-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface-hi text-ink-dim">
+          <SelfGlyph className="h-4 w-4" />
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-[13px] font-medium text-ink">{self.name}</p>
+          <p className="text-[11.5px] text-ink-faint">This device</p>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function DevicesTab({
+  state,
+  pairingWith,
+  onPair,
+  onSendFiles,
+  onUnpair,
+  onPermission,
+  onMedia,
+}: {
+  state: main.AppState;
+  pairingWith: string | null;
+  onPair: (deviceId: string) => void;
+  onSendFiles: (deviceId: string) => void;
+  onUnpair: (device: main.DeviceView) => void;
+  onPermission: (deviceId: string, capability: string, allowed: boolean) => void;
+  onMedia: (deviceId: string, command: string) => void;
+}) {
+  return (
+    <div className="space-y-10">
+      <div>
+        <SectionTitle
+          title="My ecosystem"
+          hint="Devices that trust each other and sync automatically."
+          action={
+            state.paired.length > 0 ? (
+              <Badge tone="success">
+                {state.paired.filter((d) => d.connected).length} connected
+              </Badge>
+            ) : undefined
+          }
+        />
+
+        {state.paired.length === 0 ? (
+          <EmptyState
+            icon={<IconDevices className="h-6 w-6" />}
+            title="Your ecosystem is empty"
+            hint="Devices you pair appear here and start sharing clipboard, files and notifications straight away."
+          />
+        ) : (
+          <div className="grid gap-3.5 lg:grid-cols-2">
+            {state.paired.map((device) => (
+              <PairedDeviceCard
+                key={device.device_id}
+                device={device}
+                onSendFiles={onSendFiles}
+                onUnpair={onUnpair}
+                onPermission={onPermission}
+                onMedia={onMedia}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <SectionTitle
+          title="Nearby"
+          hint="Other devices running WeDrop on this network."
+          action={
+            <span className="flex items-center gap-2 text-[12.5px] text-ink-faint">
+              <IconRadar className="h-4 w-4 animate-pulse" />
+              Scanning
+            </span>
+          }
+        />
+
+        {state.discovered.length === 0 ? (
+          <EmptyState
+            icon={<IconRadar className="h-6 w-6" />}
+            title="Nothing new nearby"
+            hint="Open WeDrop on your other devices and make sure they are on the same Wi-Fi network."
+          />
+        ) : (
+          <div className="space-y-2.5">
+            {state.discovered.map((device) => (
+              <DiscoveredDeviceCard
+                key={device.device_id}
+                device={device}
+                pairing={pairingWith === device.device_id}
+                onPair={onPair}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SplashScreen() {
+  return (
+    <div className="flex h-screen w-screen items-center justify-center bg-bg">
+      <div className="wd-fade-in flex flex-col items-center gap-4">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-border border-t-brand" />
+        <p className="text-[13px] text-ink-faint">Starting WeDrop…</p>
+      </div>
+    </div>
+  );
+}
+
+function StartupError({ message }: { message: string }) {
+  return (
+    <div className="flex h-screen w-screen items-center justify-center bg-bg p-10">
+      <div className="wd-scale-in max-w-md rounded-[22px] border border-danger/30 bg-surface p-8 text-center">
+        <h2 className="text-lg font-semibold text-danger">WeDrop could not start</h2>
+        <p className="selectable mt-3 text-[13.5px] leading-relaxed text-ink-dim">{message}</p>
+        <p className="mt-4 text-[12.5px] text-ink-faint">
+          This usually means another copy of WeDrop is already running, or the app cannot write to
+          its data folder.
+        </p>
+        <Button variant="ghost" className="mt-6" onClick={() => window.location.reload()}>
+          Try again
+        </Button>
+      </div>
+    </div>
+  );
+}

@@ -1,106 +1,221 @@
+// Package pairing keeps the list of devices that belong to this ecosystem.
+//
+// Membership is the security boundary for the whole app: clipboard text,
+// notifications, media commands and files are only ever exchanged with devices
+// in this store, and only after they have proved possession of the exact
+// identity key recorded here.
 package pairing
 
 import (
-	"crypto/sha256"
-	"encoding/binary"
 	"fmt"
+	"sort"
 	"sync"
+	"time"
+
 	"wedrop/core/storage"
 )
 
-// TrustStore manages trusted devices
+const trustFile = "trusted_devices.json"
+
+// TrustStore manages trusted devices, persisted encrypted at rest.
 type TrustStore struct {
 	store   *storage.Store
-	devices map[string]storage.TrustedDevice
 	mu      sync.RWMutex
+	devices map[string]storage.TrustedDevice
+
+	// OnChange fires after any mutation, so the UI can refresh.
+	OnChange func()
 }
 
-// NewTrustStore initializes the trust store
+// NewTrustStore loads the trust store from disk.
 func NewTrustStore(store *storage.Store) (*TrustStore, error) {
 	ts := &TrustStore{
 		store:   store,
 		devices: make(map[string]storage.TrustedDevice),
 	}
 
-	if store.FileExists("trusted_devices.json") {
-		var list []storage.TrustedDevice
-		if err := store.LoadEncryptedJSON("trusted_devices.json", &list); err != nil {
-			return nil, err
-		}
-		for _, d := range list {
-			ts.devices[d.DeviceID] = d
-		}
+	if !store.FileExists(trustFile) {
+		return ts, nil
 	}
 
+	var list []storage.TrustedDevice
+	if err := store.LoadEncryptedJSON(trustFile, &list); err != nil {
+		// A corrupt or undecryptable trust file must not stop the app from
+		// starting; the user can re-pair. Losing the file is recoverable,
+		// refusing to launch is not.
+		return ts, fmt.Errorf("trusted device list could not be read (%w) — devices must be paired again", err)
+	}
+	for _, d := range list {
+		ts.devices[d.DeviceID] = d
+	}
 	return ts, nil
 }
 
-// AddTrustedDevice adds a device to the trusted list
-func (ts *TrustStore) AddTrustedDevice(device storage.TrustedDevice) error {
+// Add inserts or updates a trusted device, preserving the pairing timestamp and
+// per-device permissions of an existing entry.
+func (ts *TrustStore) Add(device storage.TrustedDevice) error {
 	ts.mu.Lock()
-	defer ts.mu.Unlock()
-
-	device.Trusted = true
+	if existing, ok := ts.devices[device.DeviceID]; ok {
+		device.PairedAt = existing.PairedAt
+		device.AllowClipboard = existing.AllowClipboard
+		device.AllowFiles = existing.AllowFiles
+		device.AllowNotifications = existing.AllowNotifications
+		device.AllowMedia = existing.AllowMedia
+	} else {
+		device.PairedAt = time.Now().UnixMilli()
+		device.DefaultPermissions()
+	}
 	ts.devices[device.DeviceID] = device
-	return ts.save()
+	err := ts.saveLocked()
+	ts.mu.Unlock()
+
+	ts.notify()
+	return err
 }
 
-// RemoveTrustedDevice removes a device from the trusted list
-func (ts *TrustStore) RemoveTrustedDevice(deviceID string) error {
+// Remove drops a device from the ecosystem.
+func (ts *TrustStore) Remove(deviceID string) error {
+	ts.mu.Lock()
+	delete(ts.devices, deviceID)
+	err := ts.saveLocked()
+	ts.mu.Unlock()
+
+	ts.notify()
+	return err
+}
+
+// SetPermission flips one per-device switch.
+func (ts *TrustStore) SetPermission(deviceID, capability string, allowed bool) error {
+	ts.mu.Lock()
+	device, ok := ts.devices[deviceID]
+	if !ok {
+		ts.mu.Unlock()
+		return fmt.Errorf("device is not in the ecosystem")
+	}
+	switch capability {
+	case "clipboard":
+		device.AllowClipboard = allowed
+	case "files":
+		device.AllowFiles = allowed
+	case "notifications":
+		device.AllowNotifications = allowed
+	case "media":
+		device.AllowMedia = allowed
+	default:
+		ts.mu.Unlock()
+		return fmt.Errorf("unknown capability %q", capability)
+	}
+	ts.devices[deviceID] = device
+	err := ts.saveLocked()
+	ts.mu.Unlock()
+
+	ts.notify()
+	return err
+}
+
+// Rename updates the stored display name for a device.
+func (ts *TrustStore) Rename(deviceID, name string) error {
+	ts.mu.Lock()
+	device, ok := ts.devices[deviceID]
+	if !ok {
+		ts.mu.Unlock()
+		return fmt.Errorf("device is not in the ecosystem")
+	}
+	device.Name = name
+	ts.devices[deviceID] = device
+	err := ts.saveLocked()
+	ts.mu.Unlock()
+
+	ts.notify()
+	return err
+}
+
+// TouchLastSeen records that we just heard from a device. It skips the disk
+// write when the stored value is already recent, so an idle ecosystem is not
+// re-encrypting and rewriting the trust file every few seconds.
+func (ts *TrustStore) TouchLastSeen(deviceID string) {
+	now := time.Now().UnixMilli()
+
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 
-	delete(ts.devices, deviceID)
-	return ts.save()
+	device, ok := ts.devices[deviceID]
+	if !ok || now-device.LastSeen < 60_000 {
+		return
+	}
+	device.LastSeen = now
+	ts.devices[deviceID] = device
+	ts.saveLocked()
 }
 
-// IsTrusted checks if a device is trusted
+// IsTrusted reports membership in the ecosystem.
 func (ts *TrustStore) IsTrusted(deviceID string) bool {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
-
-	d, exists := ts.devices[deviceID]
-	return exists && d.Trusted
+	_, ok := ts.devices[deviceID]
+	return ok
 }
 
-// GetPublicKey gets the public key of a trusted device
-func (ts *TrustStore) GetPublicKey(deviceID string) (string, error) {
+// Get returns a copy of one trusted device.
+func (ts *TrustStore) Get(deviceID string) (storage.TrustedDevice, bool) {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
+	d, ok := ts.devices[deviceID]
+	return d, ok
+}
 
-	d, exists := ts.devices[deviceID]
-	if !exists {
-		return "", fmt.Errorf("device not found in trust store")
+// TrustedKey implements transport.PeerAuthorizer.
+func (ts *TrustStore) TrustedKey(deviceID string) (string, bool) {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+	d, ok := ts.devices[deviceID]
+	if !ok {
+		return "", false
 	}
-	return d.PublicKey, nil
+	return d.PublicKey, true
 }
 
-// GetAll returns all trusted devices
-func (ts *TrustStore) GetAll() []storage.TrustedDevice {
+// Allows reports whether a capability is permitted for a specific device.
+func (ts *TrustStore) Allows(deviceID, capability string) bool {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
+	d, ok := ts.devices[deviceID]
+	if !ok {
+		return false
+	}
+	return d.Allows(capability)
+}
 
-	var list []storage.TrustedDevice
+// All returns every trusted device, newest pairing first.
+func (ts *TrustStore) All() []storage.TrustedDevice {
+	ts.mu.RLock()
+	list := make([]storage.TrustedDevice, 0, len(ts.devices))
 	for _, d := range ts.devices {
 		list = append(list, d)
 	}
+	ts.mu.RUnlock()
+
+	sort.Slice(list, func(i, j int) bool { return list[i].PairedAt > list[j].PairedAt })
 	return list
 }
 
-func (ts *TrustStore) save() error {
-	var list []storage.TrustedDevice
+// Count returns the number of paired devices.
+func (ts *TrustStore) Count() int {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+	return len(ts.devices)
+}
+
+func (ts *TrustStore) saveLocked() error {
+	list := make([]storage.TrustedDevice, 0, len(ts.devices))
 	for _, d := range ts.devices {
 		list = append(list, d)
 	}
-	return ts.store.SaveEncryptedJSON("trusted_devices.json", list)
+	return ts.store.SaveEncryptedJSON(trustFile, list)
 }
 
-// GenerateVerificationCode generates a 6-digit code from the shared secret
-func GenerateVerificationCode(sharedSecret []byte) string {
-	hash := sha256.Sum256(sharedSecret)
-	// Take first 4 bytes of hash
-	val := binary.BigEndian.Uint32(hash[:4])
-	// Modulo 1,000,000 to get a 6 digit number
-	code := val % 1000000
-	return fmt.Sprintf("%06d", code)
+func (ts *TrustStore) notify() {
+	if ts.OnChange != nil {
+		ts.OnChange()
+	}
 }

@@ -35,8 +35,23 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   uuid: ^4.6.0
+  # Ed25519 identity keys, X25519 agreement, AES-GCM and HKDF — the Dart side of
+  # the same handshake the Go core performs.
   cryptography: ^2.9.0
   shared_preferences: ^2.5.5
+  # Where received files are written, and where the share sheet hands them over.
+  path_provider: ^2.1.5
+  # Path manipulation for safe filename handling on the receive side.
+  path: ^1.9.0
+  # Picking files to send from the device.
+  file_picker: ^8.1.7
+
+# path_provider_android 2.3.x switched to `jni`, whose Gradle script is
+# incompatible with this project's Flutter Android template (it calls a
+# `kotlin {}` block the plugin subproject does not provide). Pinning to the last
+# pre-jni release keeps the build working without losing any functionality we use.
+dependency_overrides:
+  path_provider_android: 2.2.17
 
 dev_dependencies:
   flutter_test:
