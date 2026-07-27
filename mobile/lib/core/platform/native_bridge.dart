@@ -113,12 +113,72 @@ class NativeBridge {
     } catch (_) {}
   }
 
+  /// Jumps the active local media session to an absolute position, in millis.
+  static Future<void> seekMedia(int position) async {
+    try {
+      await _channel.invokeMethod('seekMedia', {'position': position});
+    } catch (_) {}
+  }
+
+  /// Sets this device's system volume to an absolute level, 0-100.
+  static Future<void> setSystemVolume(int percent) async {
+    try {
+      await _channel.invokeMethod('setSystemVolume', {'percent': percent});
+    } catch (_) {}
+  }
+
+  /// Shows or updates the "now playing" notification for a peer's media,
+  /// with transport buttons, a progress bar and the peer's reported volume.
+  static Future<void> updateMediaNotification({
+    required String deviceId,
+    required String deviceName,
+    required String appName,
+    required String title,
+    required String artist,
+    required bool playing,
+    required int position,
+    required int duration,
+    required int volume,
+  }) async {
+    try {
+      await _channel.invokeMethod('updateMediaNotification', {
+        'device_id': deviceId,
+        'device_name': deviceName,
+        'app_name': appName,
+        'title': title,
+        'artist': artist,
+        'playing': playing,
+        'position': position,
+        'duration': duration,
+        'volume': volume,
+      });
+    } catch (_) {}
+  }
+
+  /// Dismisses the "now playing" notification.
+  static Future<void> clearMediaNotification() async {
+    try {
+      await _channel.invokeMethod('clearMediaNotification');
+    } catch (_) {}
+  }
+
   /// Asks Android to exempt WeDrop from battery optimisation, without which
   /// Doze can suspend the sockets for long stretches.
   static Future<void> requestIgnoreBatteryOptimisations() async {
     try {
       await _channel.invokeMethod('requestIgnoreBatteryOptimisations');
     } catch (_) {}
+  }
+
+  /// This phone's vitals (battery, network, memory) for the health panel.
+  /// Returns an empty map on platforms without the native implementation.
+  static Future<Map<String, dynamic>> deviceHealth() async {
+    try {
+      final result = await _channel.invokeMethod<Map<Object?, Object?>>('deviceHealth');
+      return result?.map((k, v) => MapEntry(k.toString(), v)) ?? const {};
+    } catch (_) {
+      return const {};
+    }
   }
 
   /// A friendly name for this handset, used as the default device name.

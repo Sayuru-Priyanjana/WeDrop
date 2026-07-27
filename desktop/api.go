@@ -86,6 +86,19 @@ func (s *WeDropService) GetState() AppState {
 				view.FormFactor = peer.FormFactor
 			}
 		}
+		if view.Connected {
+			s.peerStateMu.RLock()
+			if h, ok := s.peerHealth[device.DeviceID]; ok {
+				hc := h
+				view.Health = &hc
+				view.Battery = h.Battery
+			}
+			if m, ok := s.peerMedia[device.DeviceID]; ok && m.HasMedia {
+				mc := m
+				view.Media = &mc
+			}
+			s.peerStateMu.RUnlock()
+		}
 		state.Paired = append(state.Paired, view)
 	}
 
@@ -561,6 +574,70 @@ func (s *WeDropService) SendMediaCommand(deviceID, command string) error {
 // ControlLocalMedia applies a media command to this machine.
 func (s *WeDropService) ControlLocalMedia(command string) error {
 	return applyMediaCommand(command)
+}
+
+// ---------------------------------------------------------------- remote input
+
+// SendMouseMove drives a peer's cursor by a relative delta.
+func (s *WeDropService) SendMouseMove(deviceID string, dx, dy float64) error {
+	return s.sendRemoteInput(deviceID, protocol.RemoteInput{
+		Type: protocol.TypeRemoteInput, Action: protocol.InputMouseMove, DX: dx, DY: dy,
+	})
+}
+
+// SendMouseClick sends a click; button is "left", "right" or "middle".
+func (s *WeDropService) SendMouseClick(deviceID, button string) error {
+	action := protocol.InputMouseLeft
+	switch button {
+	case "right":
+		action = protocol.InputMouseRight
+	case "middle":
+		action = protocol.InputMouseMiddle
+	}
+	return s.sendRemoteInput(deviceID, protocol.RemoteInput{Type: protocol.TypeRemoteInput, Action: action})
+}
+
+// SendScroll scrolls a peer by the given vertical amount.
+func (s *WeDropService) SendScroll(deviceID string, dy float64) error {
+	return s.sendRemoteInput(deviceID, protocol.RemoteInput{
+		Type: protocol.TypeRemoteInput, Action: protocol.InputScroll, DY: dy,
+	})
+}
+
+// SendText types literal text on a peer.
+func (s *WeDropService) SendText(deviceID, text string) error {
+	return s.sendRemoteInput(deviceID, protocol.RemoteInput{
+		Type: protocol.TypeRemoteInput, Action: protocol.InputType, Text: text,
+	})
+}
+
+// SendKey presses a named special key on a peer.
+func (s *WeDropService) SendKey(deviceID, key string) error {
+	return s.sendRemoteInput(deviceID, protocol.RemoteInput{
+		Type: protocol.TypeRemoteInput, Action: protocol.InputKey, Key: key,
+	})
+}
+
+// SendPresentation sends a presentation control; action is one of
+// "next", "prev", "start", "end", "blank".
+func (s *WeDropService) SendPresentation(deviceID, action string) error {
+	table := map[string]string{
+		"next": protocol.InputPresentNext, "prev": protocol.InputPresentPrev,
+		"start": protocol.InputPresentStart, "end": protocol.InputPresentEnd,
+		"blank": protocol.InputPresentBlank,
+	}
+	mapped, ok := table[action]
+	if !ok {
+		return fmt.Errorf("unknown presentation action %q", action)
+	}
+	return s.sendRemoteInput(deviceID, protocol.RemoteInput{Type: protocol.TypeRemoteInput, Action: mapped})
+}
+
+func (s *WeDropService) sendRemoteInput(deviceID string, input protocol.RemoteInput) error {
+	if !s.trust.IsTrusted(deviceID) {
+		return fmt.Errorf("that device is not in your ecosystem")
+	}
+	return s.manager.SendTo(deviceID, input)
 }
 
 // ---------------------------------------------------------------- notifications

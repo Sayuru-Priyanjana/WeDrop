@@ -148,5 +148,16 @@ class WeDropService : Service() {
         super.onDestroy()
     }
 
+    // Deliberately empty: some OEM launchers stop a foreground service's host
+    // process when its task is swiped from Recents even though stock Android
+    // does not. Overriding this and doing nothing (rather than not overriding
+    // it, which is the same as calling stopSelf() on those OEMs) is the
+    // standard defensive measure; combined with the engine now living in
+    // WeDropApplication rather than the Activity, this is what lets sync
+    // survive the app being swiped away rather than only minimized.
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 }

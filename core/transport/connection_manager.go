@@ -531,6 +531,18 @@ func (m *Manager) OnMedia(s *Session, msg protocol.MediaMessage) {
 	}
 }
 
+func (m *Manager) OnHealth(s *Session, msg protocol.DeviceHealth) {
+	if m.Handler != nil {
+		m.Handler.OnHealth(s, msg)
+	}
+}
+
+func (m *Manager) OnRemoteInput(s *Session, msg protocol.RemoteInput) {
+	if m.Handler != nil {
+		m.Handler.OnRemoteInput(s, msg)
+	}
+}
+
 func (m *Manager) OnMediaState(s *Session, msg protocol.MediaState) {
 	if m.Handler != nil {
 		m.Handler.OnMediaState(s, msg)

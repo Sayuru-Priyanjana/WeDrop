@@ -76,7 +76,10 @@ type WeDropService struct {
 	clipSeq      int64
 	clipMu       sync.Mutex
 
-	mediaState protocol.MediaState
+	// Latest health and media state received from each peer, keyed by device ID.
+	peerStateMu sync.RWMutex
+	peerHealth  map[string]protocol.DeviceHealth
+	peerMedia   map[string]protocol.MediaState
 
 	stopChan chan struct{}
 	stopOnce sync.Once
@@ -93,6 +96,8 @@ func NewWeDropService() *WeDropService {
 		pendingIn:   make(map[string]chan bool),
 		clipHistory: newRingBuffer[ClipboardEntry](50),
 		notifs:      newRingBuffer[NotificationView](100),
+		peerHealth:  make(map[string]protocol.DeviceHealth),
+		peerMedia:   make(map[string]protocol.MediaState),
 		stopChan:    make(chan struct{}),
 		settings:    storage.DefaultSettings(),
 	}
@@ -247,7 +252,73 @@ func (s *WeDropService) initCore() error {
 	}
 
 	go s.clipboardWatcher()
+	go s.healthBroadcaster()
+	go s.nowPlayingBroadcaster()
 	return nil
+}
+
+// healthBroadcaster periodically sends this device's vitals to the ecosystem so
+// remotes can render a live status panel.
+func (s *WeDropService) healthBroadcaster() {
+	// Prime the CPU sampler and send an initial reading shortly after start,
+	// rather than making the remote wait a full interval for anything to show.
+	collectHealth(s.identity.DeviceID)
+
+	ticker := time.NewTicker(healthInterval)
+	defer ticker.Stop()
+
+	first := time.NewTimer(2 * time.Second)
+	defer first.Stop()
+
+	for {
+		select {
+		case <-s.stopChan:
+			return
+		case <-first.C:
+			s.broadcastHealth()
+		case <-ticker.C:
+			s.broadcastHealth()
+		}
+	}
+}
+
+func (s *WeDropService) broadcastHealth() {
+	if len(s.manager.ConnectedDevices()) == 0 {
+		return
+	}
+	s.manager.Broadcast("", collectHealth(s.identity.DeviceID))
+}
+
+// nowPlayingBroadcaster periodically shares what this device is playing, so a
+// paired phone can show and control it. On platforms without an implementation
+// (see media_now_playing_other.go), nowPlayingInterval is zero and this exits
+// immediately rather than spinning on a zero-duration ticker.
+func (s *WeDropService) nowPlayingBroadcaster() {
+	if nowPlayingInterval <= 0 {
+		return
+	}
+
+	ticker := time.NewTicker(nowPlayingInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.stopChan:
+			return
+		case <-ticker.C:
+			s.broadcastNowPlaying()
+		}
+	}
+}
+
+func (s *WeDropService) broadcastNowPlaying() {
+	if !s.currentSettings().AllowMediaControl {
+		return
+	}
+	if len(s.manager.ConnectedDevices()) == 0 {
+		return
+	}
+	s.manager.Broadcast(protocol.CapMedia, collectNowPlaying())
 }
 
 func (s *WeDropService) loadIdentity() error {
@@ -672,6 +743,14 @@ func (h sessionHandler) OnMediaState(session *transport.Session, msg protocol.Me
 	h.s.onMediaState(session, msg)
 }
 
+func (h sessionHandler) OnHealth(session *transport.Session, msg protocol.DeviceHealth) {
+	h.s.onHealth(session, msg)
+}
+
+func (h sessionHandler) OnRemoteInput(session *transport.Session, msg protocol.RemoteInput) {
+	h.s.onRemoteInput(session, msg)
+}
+
 func (h sessionHandler) OnDeviceInfo(session *transport.Session, info protocol.DeviceInfo) {
 	h.s.onDeviceInfo(session, info)
 }
@@ -763,6 +842,24 @@ func (s *WeDropService) onMedia(session *transport.Session, msg protocol.MediaMe
 		return
 	}
 
+	if msg.Command == protocol.MediaSeek {
+		if err := trySeekPlatform(msg.Position); err != nil {
+			log.Printf("wedrop: seek to %dms failed: %v", msg.Position, err)
+			return
+		}
+		s.emit("media:applied", msg.Command)
+		return
+	}
+
+	if msg.Command == protocol.MediaSetVolume {
+		if err := setVolumePlatform(msg.Volume); err != nil {
+			log.Printf("wedrop: set volume to %d%% failed: %v", msg.Volume, err)
+			return
+		}
+		s.emit("media:applied", msg.Command)
+		return
+	}
+
 	if err := applyMediaCommand(msg.Command); err != nil {
 		log.Printf("wedrop: media command %q failed: %v", msg.Command, err)
 		return
@@ -771,10 +868,30 @@ func (s *WeDropService) onMedia(session *transport.Session, msg protocol.MediaMe
 }
 
 func (s *WeDropService) onMediaState(session *transport.Session, msg protocol.MediaState) {
-	s.mu.Lock()
-	s.mediaState = msg
-	s.mu.Unlock()
-	s.emit("media:state", msg)
+	s.peerStateMu.Lock()
+	s.peerMedia[session.DeviceID()] = msg
+	s.peerStateMu.Unlock()
+	s.pushState()
+}
+
+func (s *WeDropService) onHealth(session *transport.Session, msg protocol.DeviceHealth) {
+	s.peerStateMu.Lock()
+	s.peerHealth[session.DeviceID()] = msg
+	s.peerStateMu.Unlock()
+	s.pushState()
+}
+
+func (s *WeDropService) onRemoteInput(session *transport.Session, msg protocol.RemoteInput) {
+	// Remote control is gated by the same per-device media permission as the
+	// media keys — turning off "control my media" also disarms the touchpad and
+	// keyboard, so one switch covers "let this device drive me".
+	if !s.currentSettings().AllowMediaControl {
+		return
+	}
+	if !s.trust.Allows(session.DeviceID(), protocol.CapMedia) {
+		return
+	}
+	applyRemoteInput(msg)
 }
 
 func (s *WeDropService) onDeviceInfo(session *transport.Session, info protocol.DeviceInfo) {

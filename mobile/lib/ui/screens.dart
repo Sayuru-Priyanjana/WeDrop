@@ -11,6 +11,7 @@ class DevicesScreen extends StatelessWidget {
   final AppService service;
   final void Function(DeviceView device) onSendFiles;
   final void Function(String deviceId) onPair;
+  final void Function(DeviceView device) onOpenDevice;
   final String? pairingWith;
 
   const DevicesScreen({
@@ -18,6 +19,7 @@ class DevicesScreen extends StatelessWidget {
     required this.service,
     required this.onSendFiles,
     required this.onPair,
+    required this.onOpenDevice,
     this.pairingWith,
   });
 
@@ -53,6 +55,7 @@ class DevicesScreen extends StatelessWidget {
                   device: device,
                   service: service,
                   onSendFiles: () => onSendFiles(device),
+                  onOpen: () => onOpenDevice(device),
                 ),
               )),
 
@@ -152,17 +155,56 @@ class _DeviceGlyph extends StatelessWidget {
   }
 }
 
+/// A compact battery indicator shown on connected device cards.
+class _BatteryPill extends StatelessWidget {
+  final int level;
+  final bool charging;
+  const _BatteryPill({required this.level, required this.charging});
+
+  @override
+  Widget build(BuildContext context) {
+    final colour = level <= 15
+        ? WeDropColors.danger
+        : level <= 35
+            ? WeDropColors.warn
+            : WeDropColors.success;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: colour.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            charging ? Icons.bolt_rounded : Icons.battery_full_rounded,
+            size: 12,
+            color: colour,
+          ),
+          const SizedBox(width: 2),
+          Text('$level%',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: colour)),
+        ],
+      ),
+    );
+  }
+}
+
 /// A paired device with its quick actions, media remote and permissions.
 class PairedDeviceTile extends StatefulWidget {
   final DeviceView device;
   final AppService service;
   final VoidCallback onSendFiles;
+  final VoidCallback onOpen;
 
   const PairedDeviceTile({
     super.key,
     required this.device,
     required this.service,
     required this.onSendFiles,
+    required this.onOpen,
   });
 
   @override
@@ -175,6 +217,10 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
   @override
   Widget build(BuildContext context) {
     final device = widget.device;
+    // Battery comes from the peer's health broadcast, shown as a pill on the card.
+    final health = widget.service.healthOf(device.deviceId);
+    final battery = device.connected ? (health?.battery ?? -1) : -1;
+    final charging = health?.charging ?? false;
     final status = device.connected
         ? 'connected'
         : device.online
@@ -195,79 +241,82 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
           : WeDropColors.border,
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                _DeviceGlyph(formFactor: device.formFactor, connected: device.connected),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        device.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: WeDropColors.ink,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          StatusDot(status),
-                          const SizedBox(width: 7),
-                          Expanded(
-                            child: Text(
-                              '${device.platform} · $statusLabel',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12.5,
-                                color: WeDropColors.inkFaint,
+          // Tapping the header opens the full remote-control screen.
+          InkWell(
+            onTap: device.connected ? widget.onOpen : null,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  _DeviceGlyph(formFactor: device.formFactor, connected: device.connected),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                device.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: WeDropColors.ink,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
+                            if (battery >= 0) ...[
+                              const SizedBox(width: 8),
+                              _BatteryPill(level: battery, charging: charging),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            StatusDot(status),
+                            const SizedBox(width: 7),
+                            Expanded(
+                              child: Text(
+                                '${device.platform} · $statusLabel',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  color: WeDropColors.inkFaint,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                IconButton(
-                  onPressed: device.online ? widget.onSendFiles : null,
-                  icon: const Icon(Icons.upload_rounded),
-                  color: WeDropColors.brandSoft,
-                  tooltip: device.online ? 'Send files' : 'Device is offline',
-                ),
-                IconButton(
-                  onPressed: () => _confirmUnpair(context),
-                  icon: const Icon(Icons.link_off_rounded),
-                  color: WeDropColors.danger,
-                  tooltip: 'Remove from ecosystem',
-                ),
-              ],
+                  IconButton(
+                    onPressed: device.online ? widget.onSendFiles : null,
+                    icon: const Icon(Icons.upload_rounded),
+                    color: WeDropColors.brandSoft,
+                    tooltip: device.online ? 'Send files' : 'Device is offline',
+                  ),
+                  IconButton(
+                    onPressed: () => _confirmUnpair(context),
+                    icon: const Icon(Icons.link_off_rounded),
+                    color: WeDropColors.danger,
+                    tooltip: 'Remove from ecosystem',
+                  ),
+                ],
+              ),
             ),
           ),
 
           // The media remote is only useful while a session is actually live.
           if (device.connected && device.allowMedia) ...[
             const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _mediaButton(Icons.skip_previous_rounded, MediaCommand.prev),
-                  _mediaButton(Icons.play_arrow_rounded, MediaCommand.playPause),
-                  _mediaButton(Icons.skip_next_rounded, MediaCommand.next),
-                  _mediaButton(Icons.volume_down_rounded, MediaCommand.volDown),
-                  _mediaButton(Icons.volume_up_rounded, MediaCommand.volUp),
-                ],
-              ),
-            ),
+            _buildMediaSection(),
           ],
 
           const Divider(height: 1),
@@ -321,6 +370,77 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
       icon: Icon(icon),
       color: WeDropColors.inkDim,
       iconSize: 22,
+    );
+  }
+
+  /// Title, artist and a live progress bar when the peer reports something
+  /// playing, plus the transport row underneath — always available so the
+  /// card still doubles as a basic remote even with nothing detected.
+  Widget _buildMediaSection() {
+    final media = widget.service.interpolatedMediaOf(widget.device.deviceId);
+    final hasMedia = media != null && media.hasMedia;
+    final known = hasMedia && media.position >= 0 && media.duration > 0;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (hasMedia) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    media.title.isEmpty ? 'Unknown track' : media.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: WeDropColors.ink,
+                    ),
+                  ),
+                ),
+                if (media.artist.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      media.artist,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, color: WeDropColors.inkFaint),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: known ? (media.position / media.duration).clamp(0.0, 1.0) : null,
+                minHeight: 3,
+                backgroundColor: WeDropColors.border,
+                valueColor: const AlwaysStoppedAnimation(WeDropColors.accent),
+              ),
+            ),
+            const SizedBox(height: 6),
+          ],
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _mediaButton(Icons.skip_previous_rounded, MediaCommand.prev),
+              _mediaButton(
+                media?.playing == true ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                MediaCommand.playPause,
+              ),
+              _mediaButton(Icons.skip_next_rounded, MediaCommand.next),
+              _mediaButton(Icons.volume_down_rounded, MediaCommand.volDown),
+              _mediaButton(Icons.volume_up_rounded, MediaCommand.volUp),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -893,19 +1013,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
 
         const SizedBox(height: 20),
-        const SectionHeader(title: 'Background'),
+        const SectionHeader(
+          title: 'Background',
+          hint: 'WeDrop always keeps a "connected devices" notification while it is '
+              'reachable — that is what keeps files, clipboard and notifications flowing.',
+        ),
         WdCard(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
             children: [
-              SettingTile(
-                title: 'Keep running in the background',
-                description: 'Stay connected so files, clipboard and notifications keep arriving.',
-                control: Switch(
-                  value: settings.runInBackground,
-                  onChanged: (v) => _patch((s) => s.runInBackground = v),
-                ),
-              ),
               SettingTile(
                 title: 'Ignore battery optimisation',
                 description: 'Stops Android suspending WeDrop while your screen is off.',

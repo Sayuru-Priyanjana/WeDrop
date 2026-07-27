@@ -120,6 +120,8 @@ export namespace main {
 	    allow_media: boolean;
 	    paired_at: number;
 	    last_seen: number;
+	    health?: protocol.DeviceHealth;
+	    media?: protocol.MediaState;
 	
 	    static createFrom(source: any = {}) {
 	        return new DeviceView(source);
@@ -142,7 +144,27 @@ export namespace main {
 	        this.allow_media = source["allow_media"];
 	        this.paired_at = source["paired_at"];
 	        this.last_seen = source["last_seen"];
+	        this.health = this.convertValues(source["health"], protocol.DeviceHealth);
+	        this.media = this.convertValues(source["media"], protocol.MediaState);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class AppState {
 	    ready: boolean;
@@ -228,6 +250,65 @@ export namespace main {
 	}
 	
 	
+
+}
+
+export namespace protocol {
+	
+	export class DeviceHealth {
+	    type: string;
+	    device_id: string;
+	    battery: number;
+	    charging: boolean;
+	    cpu_percent: number;
+	    mem_percent: number;
+	    network_type: string;
+	    network_name: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DeviceHealth(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.device_id = source["device_id"];
+	        this.battery = source["battery"];
+	        this.charging = source["charging"];
+	        this.cpu_percent = source["cpu_percent"];
+	        this.mem_percent = source["mem_percent"];
+	        this.network_type = source["network_type"];
+	        this.network_name = source["network_name"];
+	    }
+	}
+	export class MediaState {
+	    type: string;
+	    playing: boolean;
+	    has_media: boolean;
+	    title: string;
+	    artist: string;
+	    app: string;
+	    volume: number;
+	    position: number;
+	    duration: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new MediaState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.playing = source["playing"];
+	        this.has_media = source["has_media"];
+	        this.title = source["title"];
+	        this.artist = source["artist"];
+	        this.app = source["app"];
+	        this.volume = source["volume"];
+	        this.position = source["position"];
+	        this.duration = source["duration"];
+	    }
+	}
 
 }
 

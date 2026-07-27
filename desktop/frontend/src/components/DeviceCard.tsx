@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { main } from "../../wailsjs/go/models";
+import type { main, protocol } from "../../wailsjs/go/models";
 import { Badge, Button, IconButton, StatusDot, Toggle } from "./ui";
 import {
   IconClipboard,
@@ -83,6 +83,12 @@ export function PairedDeviceCard({
           </IconButton>
         </div>
       </div>
+
+      {/* Live health from the peer, shown while connected. */}
+      {device.connected && device.health && <HealthStrip health={device.health} />}
+
+      {/* Now-playing, when the peer reports it. */}
+      {device.connected && device.media?.has_media && <NowPlaying media={device.media} />}
 
       {/* Media remote, only useful while a session is actually live. */}
       {device.connected && device.allow_media && (
@@ -169,6 +175,74 @@ function PermissionRow({
         {label}
       </div>
       <Toggle checked={checked} onChange={onChange} label={label} />
+    </div>
+  );
+}
+
+/** A compact row of the peer's battery, network and CPU/memory readings. */
+function HealthStrip({ health }: { health: protocol.DeviceHealth }) {
+  const items: { icon: React.ReactNode; label: string }[] = [];
+
+  if (health.battery >= 0) {
+    items.push({
+      icon: health.charging ? "⚡" : "🔋",
+      label: `${health.battery}%`,
+    });
+  }
+  if (health.network_type && health.network_type !== "offline") {
+    items.push({
+      icon: health.network_type === "wifi" ? "📶" : "🔌",
+      label: health.network_type === "wifi" ? "Wi-Fi" : "Wired",
+    });
+  }
+  if (health.cpu_percent >= 0) items.push({ icon: "🧠", label: `CPU ${health.cpu_percent}%` });
+  if (health.mem_percent >= 0) items.push({ icon: "💾", label: `Mem ${health.mem_percent}%` });
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 border-t border-border/60 px-5 py-2.5 text-[12px] text-ink-faint">
+      {items.map((item, i) => (
+        <span key={i} className="flex items-center gap-1.5">
+          <span className="text-[13px] leading-none">{item.icon}</span>
+          {item.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Now-playing summary with a track progress bar. */
+function NowPlaying({ media }: { media: protocol.MediaState }) {
+  const known = media.position >= 0 && media.duration > 0;
+  const ratio = known ? Math.min(1, media.position / media.duration) : 0;
+
+  const fmt = (ms: number) => {
+    const total = Math.floor(ms / 1000);
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  return (
+    <div className="border-t border-border/60 px-5 py-3">
+      <div className="flex items-center gap-2 text-[12.5px]">
+        <span className="text-accent">♪</span>
+        <span className="truncate font-medium text-ink">{media.title || "Unknown track"}</span>
+        {media.artist && <span className="truncate text-ink-faint">— {media.artist}</span>}
+      </div>
+      <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-border">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-accent to-brand transition-[width] duration-500"
+          style={{ width: `${ratio * 100}%` }}
+        />
+      </div>
+      {known && (
+        <div className="mt-1 flex justify-between text-[10.5px] text-ink-faint">
+          <span>{fmt(media.position)}</span>
+          <span>{fmt(media.duration)}</span>
+        </div>
+      )}
     </div>
   );
 }

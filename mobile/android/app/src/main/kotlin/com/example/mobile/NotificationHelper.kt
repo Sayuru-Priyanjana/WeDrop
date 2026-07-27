@@ -66,6 +66,14 @@ object NotificationHelper {
             )
         }
 
+        val clipboardIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+            action = NotificationActionReceiver.ACTION_SEND_CLIPBOARD
+        }
+        val clipboardPending = PendingIntent.getBroadcast(
+            context, 1, clipboardIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
         return NotificationCompat.Builder(context, SERVICE_CHANNEL)
             .setContentTitle("WeDrop")
             .setContentText(status)
@@ -74,6 +82,13 @@ object NotificationHelper {
             .setContentIntent(pending)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .addAction(
+                NotificationCompat.Action.Builder(
+                    android.R.drawable.ic_menu_send,
+                    "Send clipboard",
+                    clipboardPending,
+                ).build(),
+            )
             .build()
     }
 

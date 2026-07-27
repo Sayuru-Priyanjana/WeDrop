@@ -32,6 +32,8 @@ class MsgType {
   static const notification = 'notification';
   static const media = 'media';
   static const mediaState = 'media_state';
+  static const health = 'health';
+  static const remoteInput = 'remote_input';
 
   static const transferOffer = 'transfer_offer';
   static const transferAccept = 'transfer_accept';
@@ -78,6 +80,48 @@ class MediaCommand {
   static const volUp = 'vol_up';
   static const volDown = 'vol_down';
   static const mute = 'mute';
+  /// Jumps to an absolute position; carries a `position` (millis) argument.
+  /// Not every peer can honour it — a receiver with no active media session
+  /// API silently ignores it, same as any command it cannot service.
+  static const seek = 'seek';
+  /// Sets an absolute system volume level (0-100), as opposed to the
+  /// relative nudges volUp/volDown apply.
+  static const setVolume = 'set_volume';
+}
+
+/// Remote-input actions carried in a [RemoteInput] message.
+class InputAction {
+  static const mouseMove = 'mouse_move';
+  static const mouseLeft = 'mouse_left';
+  static const mouseRight = 'mouse_right';
+  static const mouseMiddle = 'mouse_middle';
+  static const mouseDown = 'mouse_down';
+  static const mouseUp = 'mouse_up';
+  static const scroll = 'scroll';
+  static const type = 'type';
+  static const key = 'key';
+
+  static const presentNext = 'present_next';
+  static const presentPrev = 'present_prev';
+  static const presentStart = 'present_start';
+  static const presentEnd = 'present_end';
+  static const presentBlank = 'present_blank';
+}
+
+/// Named special keys carried in [RemoteInput.key].
+class SpecialKey {
+  static const backspace = 'backspace';
+  static const enter = 'enter';
+  static const tab = 'tab';
+  static const escape = 'escape';
+  static const up = 'up';
+  static const down = 'down';
+  static const left = 'left';
+  static const right = 'right';
+  static const space = 'space';
+  static const home = 'home';
+  static const end = 'end';
+  static const delete = 'delete';
 }
 
 /// Coarse device class, used for iconography.
@@ -262,6 +306,108 @@ class NotificationMessage {
       );
 }
 
+/// What a peer is currently playing, so a remote can render controls.
+class MediaState {
+  final bool playing;
+  final bool hasMedia;
+  final String title;
+  final String artist;
+  final String app;
+  final int volume; // 0-100, -1 unknown
+  final int position; // millis, -1 unknown
+  final int duration; // millis, -1 unknown
+
+  const MediaState({
+    this.playing = false,
+    this.hasMedia = false,
+    this.title = '',
+    this.artist = '',
+    this.app = '',
+    this.volume = -1,
+    this.position = -1,
+    this.duration = -1,
+  });
+
+  factory MediaState.fromJson(Map<String, dynamic> json) => MediaState(
+        playing: json['playing'] as bool? ?? false,
+        hasMedia: json['has_media'] as bool? ?? false,
+        title: json['title'] as String? ?? '',
+        artist: json['artist'] as String? ?? '',
+        app: json['app'] as String? ?? '',
+        volume: json['volume'] as int? ?? -1,
+        position: json['position'] as int? ?? -1,
+        duration: json['duration'] as int? ?? -1,
+      );
+}
+
+/// A peer's live vitals for the health panel.
+class DeviceHealth {
+  final String deviceId;
+  final int battery; // 0-100, -1 unknown
+  final bool charging;
+  final int cpuPercent; // 0-100, -1 unknown
+  final int memPercent; // 0-100, -1 unknown
+  final String networkType; // wifi/ethernet/cellular/offline
+  final String networkName;
+
+  const DeviceHealth({
+    required this.deviceId,
+    this.battery = -1,
+    this.charging = false,
+    this.cpuPercent = -1,
+    this.memPercent = -1,
+    this.networkType = 'offline',
+    this.networkName = '',
+  });
+
+  Map<String, dynamic> toJson() => {
+        'type': MsgType.health,
+        'device_id': deviceId,
+        'battery': battery,
+        'charging': charging,
+        'cpu_percent': cpuPercent,
+        'mem_percent': memPercent,
+        'network_type': networkType,
+        'network_name': networkName,
+      };
+
+  factory DeviceHealth.fromJson(Map<String, dynamic> json) => DeviceHealth(
+        deviceId: json['device_id'] as String? ?? '',
+        battery: json['battery'] as int? ?? -1,
+        charging: json['charging'] as bool? ?? false,
+        cpuPercent: json['cpu_percent'] as int? ?? -1,
+        memPercent: json['mem_percent'] as int? ?? -1,
+        networkType: json['network_type'] as String? ?? 'offline',
+        networkName: json['network_name'] as String? ?? '',
+      );
+}
+
+/// A mouse/keyboard/presentation event to inject on the receiving device.
+class RemoteInput {
+  final String action;
+  final double dx;
+  final double dy;
+  final String text;
+  final String key;
+
+  const RemoteInput({
+    required this.action,
+    this.dx = 0,
+    this.dy = 0,
+    this.text = '',
+    this.key = '',
+  });
+
+  Map<String, dynamic> toJson() => {
+        'type': MsgType.remoteInput,
+        'action': action,
+        if (dx != 0) 'dx': dx,
+        if (dy != 0) 'dy': dy,
+        if (text.isNotEmpty) 'text': text,
+        if (key.isNotEmpty) 'key': key,
+      };
+}
+
 /// An offer to send one file, sent on a dedicated transfer connection.
 class TransferOffer {
   final String transferId;
@@ -309,9 +455,11 @@ Map<String, dynamic> pingMessage(int seq) => {'type': MsgType.ping, 'seq': seq};
 
 Map<String, dynamic> pongMessage(int seq) => {'type': MsgType.pong, 'seq': seq};
 
-Map<String, dynamic> mediaMessage(String command) => {
+Map<String, dynamic> mediaMessage(String command, {int? position, int? volume}) => {
       'type': MsgType.media,
       'command': command,
+      'position': ?position,
+      'volume': ?volume,
     };
 
 Map<String, dynamic> unpairMessage(String deviceId) => {

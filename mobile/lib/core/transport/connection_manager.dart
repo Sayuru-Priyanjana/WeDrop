@@ -297,6 +297,23 @@ class ConnectionManager {
     unawaited(_dialPeer(peer, key));
   }
 
+  /// Retries every trusted, currently-visible peer at once, clearing backoff.
+  ///
+  /// Called when the app returns to the foreground: a stretch backgrounded may
+  /// have let Android throttle timers under Doze, so peers can look stale even
+  /// though they never actually left the network. This collapses the wait back
+  /// to "now" instead of the remaining backoff or the next maintenance tick.
+  void retryAllNow() {
+    discovery.announce();
+    for (final peer in discovery.peers) {
+      if (auth.trustedKey(peer.deviceId) == null) continue;
+      _backoff.remove(peer.deviceId);
+      if (!_shouldDial(peer.deviceId)) continue;
+      _dialing.add(peer.deviceId);
+      unawaited(_dialPeer(peer, auth.trustedKey(peer.deviceId)!));
+    }
+  }
+
   // ------------------------------------------------------------ sessions
 
   /// Installs a new session, resolving the case where both devices dialled each
@@ -326,6 +343,8 @@ class ConnectionManager {
         onClipboard: handler.onClipboard,
         onNotification: handler.onNotification,
         onMedia: handler.onMedia,
+        onMediaState: handler.onMediaState,
+        onHealth: handler.onHealth,
         onDeviceInfo: handler.onDeviceInfo,
         onUnpair: handler.onUnpair,
         onClosed: (s, error) {

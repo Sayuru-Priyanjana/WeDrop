@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'core/app_service.dart';
 import 'core/platform/native_bridge.dart';
 import 'core/transport/connection_manager.dart' show PairingRequest;
+import 'ui/device_screen.dart';
 import 'ui/screens.dart';
 import 'ui/theme.dart';
 import 'ui/widgets.dart';
@@ -73,11 +74,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Re-check whether notification access was granted while away, and — the
-      // important part — read and share anything copied in another app, since
-      // Android only lets us read the clipboard now that we are focused again.
+      // Re-check whether notification access was granted while away, force
+      // every trusted peer to reconnect immediately (Doze can have throttled
+      // the retry timers), and pick up anything copied in another app.
       _service.refreshNotificationAccess();
-      _service.syncClipboardOnResume();
+      _service.resyncOnResume();
     }
   }
 
@@ -231,6 +232,19 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     }
   }
 
+  /// Opens the per-device remote-control screen.
+  void _openDevice(DeviceView device) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DeviceScreen(
+          service: _service,
+          deviceId: device.deviceId,
+          onSendFiles: _sendFilesTo,
+        ),
+      ),
+    );
+  }
+
   /// The share-intent flow: choose a paired, online device for the shared file.
   Future<void> _pickTargetAndSend(List<String> paths) async {
     final candidates = _service.pairedDevices.where((d) => d.online).toList();
@@ -311,6 +325,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           service: _service,
           onSendFiles: _sendFilesTo,
           onPair: _startPairing,
+          onOpenDevice: _openDevice,
           pairingWith: _pairingWith,
         ),
       1 => TransfersScreen(service: _service),

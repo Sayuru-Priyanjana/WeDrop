@@ -45,6 +45,8 @@ const (
 	TypeNotification MessageType = "notification"
 	TypeMedia        MessageType = "media"
 	TypeMediaState   MessageType = "media_state"
+	TypeHealth       MessageType = "health"
+	TypeRemoteInput  MessageType = "remote_input"
 
 	// Transfer (TCP, encrypted, dedicated connection)
 	TypeTransferOffer  MessageType = "transfer_offer"
@@ -239,23 +241,106 @@ const (
 	MediaVolUp     = "vol_up"
 	MediaVolDown   = "vol_down"
 	MediaMute      = "mute"
+	// MediaSeek jumps to an absolute position, carried in MediaMessage.Position.
+	// Not every platform can honour it — a receiver with no active media session
+	// API (today, Windows) silently ignores it rather than erroring, the same
+	// as any other command it cannot service.
+	MediaSeek = "seek"
+	// MediaSetVolume sets an absolute system volume level, carried in
+	// MediaMessage.Volume (0-100) — what a slider sends, as opposed to the
+	// relative nudges MediaVolUp/MediaVolDown apply.
+	MediaSetVolume = "set_volume"
 )
 
 // MediaMessage asks the peer to act on its currently playing media.
 type MediaMessage struct {
 	Type    MessageType `json:"type"`
 	Command string      `json:"command"`
+	// Position is only meaningful for MediaSeek: the target position in millis.
+	Position int64 `json:"position,omitempty"`
+	// Volume is only meaningful for MediaSetVolume: the target level, 0-100.
+	Volume int `json:"volume,omitempty"`
 }
 
 // MediaState reports what the peer is playing, so remotes can render a UI.
 type MediaState struct {
 	Type    MessageType `json:"type"`
 	Playing bool        `json:"playing"`
+	HasMedia bool       `json:"has_media"` // false means nothing is loaded
 	Title   string      `json:"title"`
 	Artist  string      `json:"artist"`
 	App     string      `json:"app"`
-	Volume  int         `json:"volume"` // 0-100, -1 when unknown
+	Volume  int         `json:"volume"`   // 0-100, -1 when unknown
+	Position int64      `json:"position"` // current position, millis, -1 unknown
+	Duration int64      `json:"duration"` // total length, millis, -1 unknown
 }
+
+// DeviceHealth is broadcast periodically so remotes can show a device's status.
+type DeviceHealth struct {
+	Type        MessageType `json:"type"`
+	DeviceID    string      `json:"device_id"`
+	Battery     int         `json:"battery"`      // 0-100, -1 unknown (e.g. a desktop with no battery)
+	Charging    bool        `json:"charging"`
+	CPUPercent  int         `json:"cpu_percent"`  // 0-100, -1 unknown
+	MemPercent  int         `json:"mem_percent"`  // 0-100, -1 unknown
+	NetworkType string      `json:"network_type"` // "wifi", "ethernet", "cellular", "offline"
+	NetworkName string      `json:"network_name"` // SSID or interface, best effort
+}
+
+// RemoteInput carries a mouse, keyboard or presentation event to be injected on
+// the receiving device — the heart of using a phone as a remote for a desktop.
+type RemoteInput struct {
+	Type   MessageType `json:"type"`
+	Action string      `json:"action"`
+
+	// Mouse: DX/DY are relative movement; scroll uses DY. X/Y (0..1) are
+	// absolute fractions of the screen for an absolute move.
+	DX float64 `json:"dx,omitempty"`
+	DY float64 `json:"dy,omitempty"`
+	X  float64 `json:"x,omitempty"`
+	Y  float64 `json:"y,omitempty"`
+
+	// Keyboard: Text is literal characters to type; Key is a named special key.
+	Text string `json:"text,omitempty"`
+	Key  string `json:"key,omitempty"`
+}
+
+// Remote input actions.
+const (
+	InputMouseMove   = "mouse_move"   // relative move by DX/DY
+	InputMouseLeft   = "mouse_left"   // left click
+	InputMouseRight  = "mouse_right"  // right click
+	InputMouseMiddle = "mouse_middle" // middle click
+	InputMouseDown   = "mouse_down"   // press-and-hold left (for drags)
+	InputMouseUp     = "mouse_up"     // release left
+	InputScroll      = "scroll"       // scroll by DY
+	InputType        = "type"         // type Text literally
+	InputKey         = "key"          // press the named Key
+
+	// Presentation keys, kept distinct so the desktop maps them to whatever the
+	// active slideshow expects even if the generic key table changes.
+	InputPresentNext  = "present_next"
+	InputPresentPrev  = "present_prev"
+	InputPresentStart = "present_start"
+	InputPresentEnd   = "present_end"
+	InputPresentBlank = "present_blank"
+)
+
+// Named special keys carried in RemoteInput.Key.
+const (
+	KeyBackspace = "backspace"
+	KeyEnter     = "enter"
+	KeyTab       = "tab"
+	KeyEscape    = "escape"
+	KeyUp        = "up"
+	KeyDown      = "down"
+	KeyLeft      = "left"
+	KeyRight     = "right"
+	KeySpace     = "space"
+	KeyHome      = "home"
+	KeyEnd       = "end"
+	KeyDelete    = "delete"
+)
 
 // TransferOffer announces an incoming file on a dedicated transfer connection.
 type TransferOffer struct {

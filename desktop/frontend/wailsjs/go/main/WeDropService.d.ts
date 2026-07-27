@@ -35,7 +35,19 @@ export function SelectFiles():Promise<Array<string>>;
 
 export function SendFiles(arg1:string,arg2:Array<string>):Promise<void>;
 
+export function SendKey(arg1:string,arg2:string):Promise<void>;
+
 export function SendMediaCommand(arg1:string,arg2:string):Promise<void>;
+
+export function SendMouseClick(arg1:string,arg2:string):Promise<void>;
+
+export function SendMouseMove(arg1:string,arg2:number,arg3:number):Promise<void>;
+
+export function SendPresentation(arg1:string,arg2:string):Promise<void>;
+
+export function SendScroll(arg1:string,arg2:number):Promise<void>;
+
+export function SendText(arg1:string,arg2:string):Promise<void>;
 
 export function SetDeviceName(arg1:string):Promise<void>;
 

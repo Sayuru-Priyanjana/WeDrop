@@ -27,6 +27,8 @@ type SessionHandler interface {
 	OnNotification(s *Session, msg protocol.NotificationMessage)
 	OnMedia(s *Session, msg protocol.MediaMessage)
 	OnMediaState(s *Session, msg protocol.MediaState)
+	OnHealth(s *Session, msg protocol.DeviceHealth)
+	OnRemoteInput(s *Session, msg protocol.RemoteInput)
 	OnDeviceInfo(s *Session, info protocol.DeviceInfo)
 	OnUnpair(s *Session, msg protocol.Unpair)
 	OnClosed(s *Session, err error)
@@ -173,6 +175,18 @@ func (s *Session) dispatch(msgBytes []byte) {
 		var msg protocol.MediaState
 		if json.Unmarshal(msgBytes, &msg) == nil && s.handler != nil {
 			s.handler.OnMediaState(s, msg)
+		}
+
+	case protocol.TypeHealth:
+		var msg protocol.DeviceHealth
+		if json.Unmarshal(msgBytes, &msg) == nil && s.handler != nil {
+			s.handler.OnHealth(s, msg)
+		}
+
+	case protocol.TypeRemoteInput:
+		var msg protocol.RemoteInput
+		if json.Unmarshal(msgBytes, &msg) == nil && s.handler != nil {
+			s.handler.OnRemoteInput(s, msg)
 		}
 
 	case protocol.TypeUnpair:

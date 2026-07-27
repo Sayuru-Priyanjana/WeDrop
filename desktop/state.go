@@ -30,6 +30,10 @@ type DeviceView struct {
 
 	PairedAt int64 `json:"paired_at"`
 	LastSeen int64 `json:"last_seen"`
+
+	// Live telemetry from the peer, present only while connected.
+	Health *protocol.DeviceHealth `json:"health,omitempty"`
+	Media  *protocol.MediaState   `json:"media,omitempty"`
 }
 
 // PairingPrompt is an inbound request awaiting the user's decision.

@@ -28,7 +28,7 @@
 
     <application
         android:label="WeDrop"
-        android:name="${applicationName}"
+        android:name=".WeDropApplication"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="false">
 
@@ -84,6 +84,13 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!-- Routes taps on notification action buttons (media transport controls,
+             send clipboard) back into the app. Only reachable via our own
+             PendingIntents, never from another app. -->
+        <receiver
+            android:name=".NotificationActionReceiver"
+            android:exported="false" />
 
         <meta-data
             android:name="flutterEmbedding"

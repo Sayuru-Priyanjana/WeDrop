@@ -66,8 +66,32 @@ export function SendFiles(arg1, arg2) {
   return window['go']['main']['WeDropService']['SendFiles'](arg1, arg2);
 }
 
+export function SendKey(arg1, arg2) {
+  return window['go']['main']['WeDropService']['SendKey'](arg1, arg2);
+}
+
 export function SendMediaCommand(arg1, arg2) {
   return window['go']['main']['WeDropService']['SendMediaCommand'](arg1, arg2);
+}
+
+export function SendMouseClick(arg1, arg2) {
+  return window['go']['main']['WeDropService']['SendMouseClick'](arg1, arg2);
+}
+
+export function SendMouseMove(arg1, arg2, arg3) {
+  return window['go']['main']['WeDropService']['SendMouseMove'](arg1, arg2, arg3);
+}
+
+export function SendPresentation(arg1, arg2) {
+  return window['go']['main']['WeDropService']['SendPresentation'](arg1, arg2);
+}
+
+export function SendScroll(arg1, arg2) {
+  return window['go']['main']['WeDropService']['SendScroll'](arg1, arg2);
+}
+
+export function SendText(arg1, arg2) {
+  return window['go']['main']['WeDropService']['SendText'](arg1, arg2);
 }
 
 export function SetDeviceName(arg1) {

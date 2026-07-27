@@ -14,7 +14,9 @@ const Duration sessionReadTimeout = Duration(seconds: 70);
 class SessionHandler {
   final void Function(Session session, ClipboardMessage message)? onClipboard;
   final void Function(Session session, NotificationMessage message)? onNotification;
-  final void Function(Session session, String command)? onMedia;
+  final void Function(Session session, String command, int? position, int? volume)? onMedia;
+  final void Function(Session session, MediaState state)? onMediaState;
+  final void Function(Session session, DeviceHealth health)? onHealth;
   final void Function(Session session, DeviceInfo info)? onDeviceInfo;
   final void Function(Session session)? onUnpair;
   final void Function(Session session, Object? error)? onClosed;
@@ -23,6 +25,8 @@ class SessionHandler {
     this.onClipboard,
     this.onNotification,
     this.onMedia,
+    this.onMediaState,
+    this.onHealth,
     this.onDeviceInfo,
     this.onUnpair,
     this.onClosed,
@@ -108,7 +112,22 @@ class Session {
 
       case MsgType.media:
         final command = message['command'] as String?;
-        if (command != null) handler.onMedia?.call(this, command);
+        if (command != null) {
+          handler.onMedia?.call(
+            this,
+            command,
+            message['position'] as int?,
+            message['volume'] as int?,
+          );
+        }
+        break;
+
+      case MsgType.mediaState:
+        handler.onMediaState?.call(this, MediaState.fromJson(message));
+        break;
+
+      case MsgType.health:
+        handler.onHealth?.call(this, DeviceHealth.fromJson(message));
         break;
 
       case MsgType.unpair:

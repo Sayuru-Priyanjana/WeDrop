@@ -53,4 +53,7 @@ dependencies {
     // side. Flutter's own AndroidX transitive versions are not guaranteed, so
     // the one we compile against is pinned explicitly.
     implementation("androidx.core:core-ktx:1.13.1")
+    // androidx.media.app.NotificationCompat.MediaStyle for the now-playing
+    // notification's transport-button layout and progress bar.
+    implementation("androidx.media:media:1.7.0")
 }
