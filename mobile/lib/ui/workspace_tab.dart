@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../core/app_service.dart';
 import '../core/protocol/messages.dart';
 import '../core/storage/store.dart';
+import 'media_controller_screen.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -119,6 +120,26 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
       final newIdx = (idx + delta).clamp(0, list.length - 1);
       if (newIdx == idx) return;
       list.insert(newIdx, list.removeAt(idx));
+      for (var i = 0; i < list.length; i++) {
+        list[i].order = i;
+      }
+    });
+    _persistLayouts();
+  }
+
+  /// Drag-and-drop reorder: moves the dragged widget to sit where the target
+  /// widget currently is, shifting everything between them over by one — the
+  /// grid reflows around the new order on the very next build.
+  void _reorderWidgetTo(String draggedId, String targetId) {
+    if (draggedId == targetId) return;
+    setState(() {
+      final list = _layout.widgets..sort((a, b) => a.order.compareTo(b.order));
+      final draggedIdx = list.indexWhere((w) => w.id == draggedId);
+      final targetIdx = list.indexWhere((w) => w.id == targetId);
+      if (draggedIdx == -1 || targetIdx == -1) return;
+      final item = list.removeAt(draggedIdx);
+      final insertAt = draggedIdx < targetIdx ? targetIdx - 1 : targetIdx;
+      list.insert(insertAt, item);
       for (var i = 0; i < list.length; i++) {
         list[i].order = i;
       }
@@ -290,6 +311,7 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
       onResizeWidget: _resizeWidget,
       onRemoveWidget: _removeWidget,
       onMoveWidget: _moveWidget,
+      onReorderWidgets: _reorderWidgetTo,
       showWidgetMenus: true,
       layoutName: _layout.name,
       onOpenLayoutPicker: _openLayoutPicker,
@@ -338,6 +360,7 @@ class _WorkspaceBody extends StatelessWidget {
   final void Function(WidgetInstance) onResizeWidget;
   final void Function(WidgetInstance) onRemoveWidget;
   final void Function(WidgetInstance, int) onMoveWidget;
+  final void Function(String draggedId, String targetId) onReorderWidgets;
   final bool showWidgetMenus;
   final String layoutName;
   final VoidCallback? onOpenLayoutPicker;
@@ -351,6 +374,7 @@ class _WorkspaceBody extends StatelessWidget {
     required this.onResizeWidget,
     required this.onRemoveWidget,
     required this.onMoveWidget,
+    required this.onReorderWidgets,
     required this.showWidgetMenus,
     required this.layoutName,
     required this.onOpenLayoutPicker,
@@ -414,8 +438,50 @@ class _WorkspaceBody extends StatelessWidget {
           state: service.minimizedAppsOf(device.deviceId),
           menu: _menuFor(context, instance),
         );
+      case WidgetType.mediaController:
+        return _MediaControllerCard(
+          service: service,
+          device: device,
+          media: service.interpolatedMediaOf(device.deviceId),
+          menu: _menuFor(context, instance),
+        );
     }
     return const SizedBox.shrink();
+  }
+
+  /// Wraps one grid cell so it can be long-pressed and dragged onto another
+  /// cell to reorder — the drag handle is the whole card (a long press does
+  /// not conflict with the card's own taps/short-presses, e.g. the desktop
+  /// switcher's prev/next buttons or a minimized-window chip).
+  Widget _draggableCell(BuildContext context, WidgetInstance instance) {
+    final rendered = _renderOther(context, instance);
+    return LongPressDraggable<String>(
+      data: instance.id,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: Material(
+        color: Colors.transparent,
+        child: SizedBox(
+          width: instance.size == WidgetSize.compact ? 160 : 300,
+          child: Opacity(opacity: 0.85, child: rendered),
+        ),
+      ),
+      childWhenDragging: Opacity(opacity: 0.3, child: rendered),
+      child: DragTarget<String>(
+        onWillAcceptWithDetails: (details) => details.data != instance.id,
+        onAcceptWithDetails: (details) => onReorderWidgets(details.data, instance.id),
+        builder: (context, candidates, rejected) {
+          final hovering = candidates.isNotEmpty;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(Radii.card),
+              border: hovering ? Border.all(color: WeDropColors.brand, width: 2) : null,
+            ),
+            child: rendered,
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -425,31 +491,32 @@ class _WorkspaceBody extends StatelessWidget {
     final buttonsInstance = _find(WidgetType.buttons);
     final buttons = service.workspaceButtonsOf(device.deviceId);
 
-    final rows = <Widget>[];
-    var i = 0;
-    while (i < others.length) {
-      final a = others[i];
-      final pairWithNext =
-          a.size == WidgetSize.compact && i + 1 < others.length && others[i + 1].size == WidgetSize.compact;
-      if (pairWithNext) {
-        final b = others[i + 1];
-        rows.add(Padding(
-          padding: const EdgeInsets.only(bottom: Space.sm),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: _renderOther(context, a)),
-              const SizedBox(width: Space.sm),
-              Expanded(child: _renderOther(context, b)),
-            ],
-          ),
-        ));
-        i += 2;
-      } else {
-        rows.add(Padding(padding: const EdgeInsets.only(bottom: Space.sm), child: _renderOther(context, a)));
-        i += 1;
-      }
-    }
+    // A real grid, not a column: any compact widget takes half a row and
+    // flows next to whichever other compact widget comes next in the list
+    // (Pinterest/tile style), rather than only pairing up when two compact
+    // widgets happen to sit next to each other. A full-size widget always
+    // gets its own row, since its width alone fills it. Reordering (in the
+    // Widgets tab, not the read-only full-screen "run mode") is drag-and-
+    // drop: a long-press on any widget picks it up, dropping it onto another
+    // slot swaps them — the grid reflows around the new order automatically,
+    // there is nothing further to "resize" by hand.
+    final grid = LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = Space.sm;
+        final halfWidth = (constraints.maxWidth - gap) / 2;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final w in others)
+              SizedBox(
+                width: w.size == WidgetSize.compact ? halfWidth : constraints.maxWidth,
+                child: showWidgetMenus ? _draggableCell(context, w) : _renderOther(context, w),
+              ),
+          ],
+        );
+      },
+    );
 
     return Column(
       children: [
@@ -501,7 +568,7 @@ class _WorkspaceBody extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ...rows,
+                if (others.isNotEmpty) Padding(padding: const EdgeInsets.only(bottom: Space.sm), child: grid),
                 if (buttonsInstance != null)
                   Expanded(
                     child: Column(
@@ -850,6 +917,9 @@ class _WorkspaceGrid extends StatelessWidget {
       );
     }
 
+    // The "add" tile always sits at the end of the grid, not just when it's
+    // empty — buttons are edited on the desktop, so this is always a live
+    // door to that editor, not a one-time onboarding prompt.
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = (constraints.maxWidth / _kTileTargetWidth).floor().clamp(4, 10);
@@ -860,13 +930,42 @@ class _WorkspaceGrid extends StatelessWidget {
             crossAxisSpacing: Space.xs,
             childAspectRatio: 0.92,
           ),
-          itemCount: buttons.length,
+          itemCount: buttons.length + 1,
           itemBuilder: (context, i) {
+            if (i == buttons.length) {
+              return _AddButtonTile(onTap: onConfigure);
+            }
             final button = buttons[i];
             return _WorkspaceButtonTile(button: button, onTap: () => onRun(button));
           },
         );
       },
+    );
+  }
+}
+
+class _AddButtonTile extends StatelessWidget {
+  final VoidCallback onTap;
+  const _AddButtonTile({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(Radii.control),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(Radii.control),
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(Radii.control),
+            border: Border.all(color: WeDropColors.border),
+          ),
+          child: const Center(
+            child: Icon(Icons.add_rounded, color: WeDropColors.inkFaint, size: 20),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -956,6 +1055,7 @@ class _WorkspaceFullScreenState extends State<_WorkspaceFullScreen> {
             onResizeWidget: (_) {},
             onRemoveWidget: (_) {},
             onMoveWidget: (_, _) {},
+            onReorderWidgets: (_, _) {},
             showWidgetMenus: false,
             layoutName: _layout.name,
             onOpenLayoutPicker: widget.layouts.length > 1 ? _pickLayout : null,
@@ -969,6 +1069,49 @@ class _WorkspaceFullScreenState extends State<_WorkspaceFullScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A widget card's own header: icon + title + optional trailing (the tune
+/// menu). The title is wrapped in a scale-down [FittedBox] rather than a
+/// fixed font size — when a widget is resized to compact (half width), its
+/// title automatically shrinks to whatever fits instead of overflowing or
+/// silently truncating to ellipsis, with no per-widget size math needed.
+class _CardTitle extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final double iconSize;
+  final double fontSize;
+
+  const _CardTitle({
+    required this.icon,
+    required this.text,
+    this.iconSize = 18,
+    this.fontSize = 12.5,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: iconSize, color: WeDropColors.accent),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                text,
+                maxLines: 1,
+                style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w600, color: WeDropColors.inkDim),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1002,12 +1145,8 @@ class _DesktopSwitcherCard extends StatelessWidget {
     return WdCard(
       child: Row(
         children: [
-          const Icon(Icons.desktop_windows_rounded, size: 18, color: WeDropColors.accent),
+          Expanded(child: _CardTitle(icon: Icons.desktop_windows_rounded, text: 'Switch desktop')),
           const SizedBox(width: 8),
-          const Expanded(
-            child: Text('Switch desktop',
-                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: WeDropColors.inkDim)),
-          ),
           _SwitcherButton(icon: Icons.chevron_left_rounded, onTap: () => _switch(false)),
           const SizedBox(width: 8),
           _SwitcherButton(icon: Icons.chevron_right_rounded, onTap: () => _switch(true)),
@@ -1065,14 +1204,10 @@ class _DynamicControlsCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.auto_awesome_rounded, size: 18, color: WeDropColors.accent),
-              const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  controls.isEmpty ? 'Dynamic controls' : 'Now on desktop: $appName',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: WeDropColors.inkDim),
+                child: _CardTitle(
+                  icon: Icons.auto_awesome_rounded,
+                  text: controls.isEmpty ? 'Dynamic controls' : 'Now on desktop: $appName',
                 ),
               ),
               ?menu,
@@ -1138,6 +1273,8 @@ class _ConfigurePrompt extends StatelessWidget {
               Expanded(
                 child: Text(
                   message,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 12.5, color: WeDropColors.inkDim),
                 ),
               ),
@@ -1182,7 +1319,15 @@ class _DynamicControlTile extends StatelessWidget {
             children: [
               Icon(icon, size: 18, color: color),
               const SizedBox(height: Space.xs),
-              Text(control.label, style: AppText.caption.copyWith(color: WeDropColors.ink)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  control.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.caption.copyWith(color: WeDropColors.ink),
+                ),
+              ),
             ],
           ),
         ),
@@ -1213,12 +1358,7 @@ class _MinimizedAppsCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.web_asset_off_rounded, size: 18, color: WeDropColors.accent),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text('Minimized apps',
-                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: WeDropColors.inkDim)),
-              ),
+              Expanded(child: _CardTitle(icon: Icons.web_asset_off_rounded, text: 'Minimized apps')),
               ?menu,
             ],
           ),
@@ -1276,6 +1416,77 @@ class _MinimizedChip extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A compact now-playing + transport controls widget — deliberately smaller
+/// than the Overview tab's own media card (no seek bar, no volume row, no
+/// artwork beyond a small thumbnail): this is meant to sit half-width next
+/// to another compact widget. Tapping it opens the full media controller
+/// screen for anything more than play/pause/skip.
+class _MediaControllerCard extends StatelessWidget {
+  final AppService service;
+  final DeviceView device;
+  final MediaState? media;
+  final Widget? menu;
+
+  const _MediaControllerCard({required this.service, required this.device, required this.media, required this.menu});
+
+  @override
+  Widget build(BuildContext context) {
+    final m = media;
+    final hasMedia = m != null && m.hasMedia;
+
+    return WdCard(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => MediaControllerScreen(service: service, deviceId: device.deviceId),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _CardTitle(
+                  icon: Icons.music_note_rounded,
+                  text: hasMedia ? (m.title.isEmpty ? 'Now playing' : m.title) : 'Nothing playing',
+                  iconSize: 16,
+                  fontSize: 12,
+                ),
+              ),
+              ?menu,
+            ],
+          ),
+          if (hasMedia && m.artist.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(m.artist,
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10.5, color: WeDropColors.inkFaint)),
+            ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _transportBtn(Icons.skip_previous_rounded, MediaCommand.prev),
+              _transportBtn(m?.playing == true ? Icons.pause_rounded : Icons.play_arrow_rounded, MediaCommand.playPause, large: true),
+              _transportBtn(Icons.skip_next_rounded, MediaCommand.next),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _transportBtn(IconData icon, String command, {bool large = false}) {
+    return IconButton(
+      onPressed: () => service.sendMediaCommand(device.deviceId, command),
+      icon: Icon(icon),
+      iconSize: large ? 24 : 19,
+      visualDensity: VisualDensity.compact,
+      color: large ? WeDropColors.brandSoft : WeDropColors.inkDim,
     );
   }
 }

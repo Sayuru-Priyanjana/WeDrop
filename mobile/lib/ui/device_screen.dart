@@ -292,9 +292,6 @@ class _HealthGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final h = health;
 
-    // A wider screen (tablet/landscape) fits four tiles across; a phone fits two.
-    final columns = MediaQuery.of(context).size.width > 520 ? 4 : 2;
-
     final tiles = <Widget>[
       _HealthTile(
         icon: h?.charging == true ? Icons.battery_charging_full_rounded : Icons.battery_full_rounded,
@@ -324,14 +321,16 @@ class _HealthGrid extends StatelessWidget {
       ],
     ];
 
-    return GridView.count(
-      crossAxisCount: columns,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 10,
-      crossAxisSpacing: 10,
-      childAspectRatio: 1.35,
-      children: tiles,
+    return Row(
+      children: [
+        for (int i = 0; i < tiles.length; i++)
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(right: i < tiles.length - 1 ? 8 : 0),
+              child: tiles[i],
+            ),
+          ),
+      ],
     );
   }
 
@@ -373,20 +372,28 @@ class _HealthTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return WdCard(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: accent, size: 22),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(value,
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.w700, color: WeDropColors.ink)),
-              Text(label, style: const TextStyle(fontSize: 11.5, color: WeDropColors.inkFaint)),
-            ],
+          Icon(icon, color: accent, size: 14),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w700, color: WeDropColors.ink)),
+                Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 9, color: WeDropColors.inkFaint)),
+              ],
+            ),
           ),
         ],
       ),
@@ -743,6 +750,13 @@ class _RemoteTabState extends State<_RemoteTab> {
   final FocusNode _keyboardFocus = FocusNode();
   Offset? _last;
 
+  // Purely local, no network round-trip involved: the touchpad has no visual
+  // response to a touch on its own, so a drag can feel "dead" for the first
+  // moment while the actual cursor move is still in flight to the desktop.
+  // Lighting the pad up the instant a finger touches it makes the input feel
+  // immediately responsive regardless of real network latency.
+  bool _panActive = false;
+
   // Mouse-move deltas are coalesced here and flushed on a fixed timer instead
   // of firing a network message per onPanUpdate callback (which can be
   // dozens per second on a fast drag) — this is what caused the visible lag
@@ -790,7 +804,10 @@ class _RemoteTabState extends State<_RemoteTab> {
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: GestureDetector(
-              onPanStart: (d) => _last = d.localPosition,
+              onPanStart: (d) {
+                _last = d.localPosition;
+                setState(() => _panActive = true);
+              },
               onPanUpdate: (d) {
                 final last = _last;
                 if (last == null) return;
@@ -801,6 +818,11 @@ class _RemoteTabState extends State<_RemoteTab> {
               onPanEnd: (_) {
                 _last = null;
                 _flushMove();
+                setState(() => _panActive = false);
+              },
+              onPanCancel: () {
+                _last = null;
+                setState(() => _panActive = false);
               },
               // A single tap is a left click; the OS focus follows the cursor.
               onTap: () => _send(const RemoteInput(action: InputAction.mouseLeft)),
@@ -808,22 +830,27 @@ class _RemoteTabState extends State<_RemoteTab> {
                 HapticFeedback.mediumImpact();
                 _send(const RemoteInput(action: InputAction.mouseRight));
               },
-              child: Container(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                curve: Curves.easeOut,
                 decoration: BoxDecoration(
-                  color: WeDropColors.surface.withValues(alpha: 0.6),
+                  color: _panActive
+                      ? WeDropColors.brand.withValues(alpha: 0.1)
+                      : WeDropColors.surface.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: WeDropColors.border),
+                  border: Border.all(color: _panActive ? WeDropColors.brandSoft : WeDropColors.border),
                 ),
-                child: const Center(
+                child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.touch_app_rounded, size: 34, color: WeDropColors.inkFaint),
-                      SizedBox(height: 10),
-                      Text('Drag to move · tap to click',
+                      Icon(Icons.touch_app_rounded,
+                          size: 34, color: _panActive ? WeDropColors.brandSoft : WeDropColors.inkFaint),
+                      const SizedBox(height: 10),
+                      const Text('Drag to move · tap to click',
                           style: TextStyle(color: WeDropColors.inkFaint, fontSize: 12.5)),
-                      SizedBox(height: 2),
-                      Text('long-press to right-click',
+                      const SizedBox(height: 2),
+                      const Text('long-press to right-click',
                           style: TextStyle(color: WeDropColors.inkFaint, fontSize: 11.5)),
                     ],
                   ),

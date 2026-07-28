@@ -10,7 +10,7 @@ import 'theme.dart';
 /// A small, rounded album-art preview decoded from a base64 JPEG. Falls back
 /// to a generic note icon if the bytes ever fail to decode (a partial/corrupt
 /// transfer should never crash a screen).
-class ArtworkThumbnail extends StatelessWidget {
+class ArtworkThumbnail extends StatefulWidget {
   final String base64;
   final double size;
   final double radius;
@@ -18,29 +18,66 @@ class ArtworkThumbnail extends StatelessWidget {
   const ArtworkThumbnail({super.key, required this.base64, this.size = 52, this.radius = 10});
 
   @override
-  Widget build(BuildContext context) {
-    Uint8List? bytes;
-    try {
-      bytes = base64Decode(base64);
-    } catch (_) {
-      bytes = null;
-    }
+  State<ArtworkThumbnail> createState() => _ArtworkThumbnailState();
+}
 
+class _ArtworkThumbnailState extends State<ArtworkThumbnail> {
+  Uint8List? _bytes;
+  String? _decodedFor;
+
+  @override
+  void initState() {
+    super.initState();
+    _decode();
+  }
+
+  @override
+  void didUpdateWidget(ArtworkThumbnail old) {
+    super.didUpdateWidget(old);
+    _decode();
+  }
+
+  // Whatever embeds this (the media cards) rebuilds far more often than the
+  // artwork itself changes — MediaState ticks every second or so just to
+  // interpolate the progress bar. Re-decoding the same base64 string on every
+  // one of those rebuilds handed Image.memory a brand-new Uint8List each
+  // time; since MemoryImage's equality compares that list by reference, the
+  // framework could never recognize two decodes of the same artwork as "the
+  // same image" and redecoded (and repainted) it on every tick — the visible
+  // flicker, and the HWUI "Image decoding logging dropped!" spam from
+  // decoding far more often than anything actually changed. Skipping the
+  // decode whenever the base64 string itself hasn't changed keeps the same
+  // Uint8List (and so the same resolved image) across all those rebuilds.
+  void _decode() {
+    if (_decodedFor == widget.base64) return;
+    _decodedFor = widget.base64;
+    try {
+      _bytes = base64Decode(widget.base64);
+    } catch (_) {
+      _bytes = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final fallback = ColoredBox(
       color: WeDropColors.surfaceHi,
-      child: Icon(Icons.music_note_rounded, color: WeDropColors.inkFaint, size: size * 0.45),
+      child: Icon(Icons.music_note_rounded, color: WeDropColors.inkFaint, size: widget.size * 0.45),
     );
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(radius),
+      borderRadius: BorderRadius.circular(widget.radius),
       child: SizedBox(
-        width: size,
-        height: size,
-        child: bytes == null
+        width: widget.size,
+        height: widget.size,
+        child: _bytes == null
             ? fallback
             : Image.memory(
-                bytes,
+                _bytes!,
                 fit: BoxFit.cover,
+                // Keeps showing the previous frame instead of flashing blank
+                // for the rare case the artwork genuinely does change.
+                gaplessPlayback: true,
                 errorBuilder: (context, error, stack) => fallback,
               ),
       ),
@@ -406,11 +443,14 @@ class VerificationCodeDisplay extends StatelessWidget {
             final screenWidth = MediaQuery.sizeOf(context).width;
             // A generous estimate of the chrome around this widget (dialog/
             // overlay padding and margins) so the tiles fit comfortably
-            // without needing this widget's actual incoming constraints.
+            // without needing this widget's actual incoming constraints —
+            // this is only ever approximate (different callers wrap it in
+            // different padding), so the scroll view below is the actual
+            // guarantee against overflow, not this number.
             final available = screenWidth - 120;
-            final tileWidth = (available / digits.length).clamp(28.0, 38.0);
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            final tileWidth = (available / digits.length).clamp(26.0, 36.0);
+            final row = Row(
+              mainAxisSize: MainAxisSize.min,
               children: digits.map((digit) {
                 return Container(
                   width: tileWidth,
@@ -433,6 +473,15 @@ class VerificationCodeDisplay extends StatelessWidget {
                   ),
                 );
               }).toList(),
+            );
+            // However close the estimate above gets, this is what actually
+            // prevents a RenderFlex overflow: if the tiles are even a few
+            // pixels wider than the space this particular caller grants,
+            // this scrolls instead of clipping/overflowing.
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const ClampingScrollPhysics(),
+              child: row,
             );
           },
         ),

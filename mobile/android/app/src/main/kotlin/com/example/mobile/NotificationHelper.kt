@@ -100,7 +100,12 @@ object NotificationHelper {
         )
 
         return NotificationCompat.Builder(context, SERVICE_CHANNEL)
-            .setContentTitle("WeDrop")
+            // No content title: the system header already shows the app's own
+            // name next to the small icon, so a redundant "WeDrop" title line
+            // just adds height — and a collapsed notification only renders
+            // its action row if the title+text content fits in the standard
+            // collapsed height. Dropping the title is what keeps "Send
+            // clipboard" visible without the user having to expand this.
             .setContentText(status)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             // Dismissable, not pinned: the user can swipe this away like any
