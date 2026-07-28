@@ -28,8 +28,37 @@ func runAction(msg protocol.WorkspaceAction) error {
 
 	case protocol.WorkspaceShellCommand:
 		return exec.Command("cmd", "/C", msg.Command).Start()
+
+	case protocol.WorkspaceRestoreWindow:
+		return restoreWindow(msg.WindowID)
 	}
 	return fmt.Errorf("unknown workspace action %q", msg.Action)
+}
+
+// user32 ShowWindow/SetForegroundWindow are not wrapped by x/sys/windows
+// (only a handful of user32 functions are), so this declares them directly —
+// same pattern as remoteinput's own user32 procs.
+var (
+	user32Workspace         = windows.NewLazySystemDLL("user32.dll")
+	procShowWindow          = user32Workspace.NewProc("ShowWindow")
+	procSetForegroundWindow = user32Workspace.NewProc("SetForegroundWindow")
+)
+
+// restoreWindow un-minimizes and focuses the window with the given native
+// handle (reported earlier by the minimizedapps plugin) — SW_RESTORE first
+// (a no-op if it's not actually minimized), then SetForegroundWindow, the
+// same two-call sequence any normal taskbar click performs.
+func restoreWindow(id int64) error {
+	if id == 0 {
+		return fmt.Errorf("no window id")
+	}
+	hwnd := uintptr(id)
+	procShowWindow.Call(hwnd, uintptr(windows.SW_RESTORE))
+	ret, _, _ := procSetForegroundWindow.Call(hwnd)
+	if ret == 0 {
+		return fmt.Errorf("could not focus window")
+	}
+	return nil
 }
 
 // shellOpen hands target (a file/app path, a folder path, or a URL) to

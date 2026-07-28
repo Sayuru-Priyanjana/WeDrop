@@ -117,9 +117,10 @@ class _DeviceScreenState extends State<DeviceScreen> with SingleTickerProviderSt
           indicatorColor: WeDropColors.brand,
           tabs: const [
             Tab(text: 'Overview', icon: Icon(Icons.dashboard_rounded, size: 18)),
+            Tab(text: 'Workspace', icon: Icon(Icons.dashboard_customize_rounded, size: 18)),
             Tab(text: 'Remote', icon: Icon(Icons.mouse_rounded, size: 18)),
             Tab(text: 'Present', icon: Icon(Icons.slideshow_rounded, size: 18)),
-            Tab(text: 'Workspace', icon: Icon(Icons.dashboard_customize_rounded, size: 18)),
+         
           ],
         ),
       ),
@@ -134,9 +135,10 @@ class _DeviceScreenState extends State<DeviceScreen> with SingleTickerProviderSt
               physics: const NeverScrollableScrollPhysics(),
               children: [
                 _OverviewTab(service: widget.service, device: device, health: health, media: media),
-                _RemoteTab(service: widget.service, device: device),
-                _PresentTab(service: widget.service, device: device),
                 WorkspaceTab(service: widget.service, device: device),
+                _RemoteTab(service: widget.service, device: device),
+                _PresentTab(service: widget.service, device: device)
+                
               ],
             ),
     );

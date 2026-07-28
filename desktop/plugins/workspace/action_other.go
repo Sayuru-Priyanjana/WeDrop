@@ -30,6 +30,9 @@ func runAction(msg protocol.WorkspaceAction) error {
 			shell = "/bin/bash"
 		}
 		return exec.Command(shell, "-c", msg.Command).Start()
+
+	case protocol.WorkspaceRestoreWindow:
+		return fmt.Errorf("restoring windows is not supported on %s yet", runtime.GOOS)
 	}
 	return fmt.Errorf("unknown workspace action %q", msg.Action)
 }
