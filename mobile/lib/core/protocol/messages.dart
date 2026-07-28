@@ -35,6 +35,7 @@ class MsgType {
   static const health = 'health';
   static const remoteInput = 'remote_input';
   static const workspaceAction = 'workspace_action';
+  static const adaptiveControls = 'adaptive_controls';
 
   static const transferOffer = 'transfer_offer';
   static const transferAccept = 'transfer_accept';
@@ -71,6 +72,12 @@ class Capability {
   static const notifications = 'notifications';
   static const media = 'media';
   static const workspace = 'workspace';
+  // Its own capability (a plugin id must be unique) purely so a peer can
+  // advertise "I understand this message type" — always advertised, same as
+  // workspace/health. Running a control's action still goes through the
+  // exact same AllowWorkspace permission as any other workspace action;
+  // this only gates whether the schema itself is even sent.
+  static const adaptiveControls = 'adaptive_controls';
   // No toggle; always advertised.
   static const health = 'device-health';
 }
@@ -139,6 +146,20 @@ class SpecialKey {
   static const home = 'home';
   static const end = 'end';
   static const delete = 'delete';
+
+  // Function keys — added for dynamic controls (e.g. VS Code's Run/Debug).
+  static const f1 = 'f1';
+  static const f2 = 'f2';
+  static const f3 = 'f3';
+  static const f4 = 'f4';
+  static const f5 = 'f5';
+  static const f6 = 'f6';
+  static const f7 = 'f7';
+  static const f8 = 'f8';
+  static const f9 = 'f9';
+  static const f10 = 'f10';
+  static const f11 = 'f11';
+  static const f12 = 'f12';
 }
 
 /// Coarse device class, used for iconography.
@@ -560,6 +581,61 @@ class WorkspaceAction {
         if (url.isNotEmpty) 'url': url,
         if (command.isNotEmpty) 'command': command,
       };
+
+  /// Needed for the first time by AdaptiveControl — every earlier use of
+  /// WorkspaceAction only ever sent one, never received one.
+  factory WorkspaceAction.fromJson(Map<String, dynamic> json) => WorkspaceAction(
+        action: json['action'] as String? ?? '',
+        modifiers: (json['modifiers'] as List?)?.cast<String>() ?? const [],
+        key: json['key'] as String? ?? '',
+        path: json['path'] as String? ?? '',
+        url: json['url'] as String? ?? '',
+        command: json['command'] as String? ?? '',
+      );
+}
+
+/// One dynamic, app-provided control the peer's currently focused
+/// application makes available — its action reuses [WorkspaceAction]
+/// verbatim, so running one needs no execution path beyond what already
+/// handles a workspace button's own action.
+class AdaptiveControl {
+  final String id;
+  final String label;
+  /// Same curated icon-key vocabulary as WorkspaceButton.icon
+  /// (ui/workspace_tab.dart's kWorkspaceIcons).
+  final String icon;
+  final WorkspaceAction action;
+
+  const AdaptiveControl({
+    required this.id,
+    required this.label,
+    required this.icon,
+    required this.action,
+  });
+
+  factory AdaptiveControl.fromJson(Map<String, dynamic> json) => AdaptiveControl(
+        id: json['id'] as String? ?? '',
+        label: json['label'] as String? ?? '',
+        icon: json['icon'] as String? ?? '',
+        action: WorkspaceAction.fromJson((json['action'] as Map?)?.cast<String, dynamic>() ?? const {}),
+      );
+}
+
+/// What the peer's foreground app currently makes available, broadcast
+/// whenever it changes (and once when a peer connects). An empty [controls]
+/// list (with [appName] empty) means no recognized app is currently focused.
+class AdaptiveControlsState {
+  final String appName;
+  final List<AdaptiveControl> controls;
+
+  const AdaptiveControlsState({this.appName = '', this.controls = const []});
+
+  factory AdaptiveControlsState.fromJson(Map<String, dynamic> json) => AdaptiveControlsState(
+        appName: json['app_name'] as String? ?? '',
+        controls: ((json['controls'] as List?) ?? const [])
+            .map((e) => AdaptiveControl.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
 }
 
 /// An offer to send one file, sent on a dedicated transfer connection.

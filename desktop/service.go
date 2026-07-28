@@ -26,6 +26,7 @@ import (
 	"wedrop/core/storage"
 	"wedrop/core/transport"
 
+	"desktop/plugins/adaptivecontrols"
 	"desktop/plugins/clipboard"
 	"desktop/plugins/files"
 	"desktop/plugins/health"
@@ -77,6 +78,7 @@ type WeDropService struct {
 	remoteinPlugin  *remoteinput.Plugin
 	filesPlugin     *files.Plugin
 	workspacePlugin *workspace.Plugin
+	adaptivePlugin  *adaptivecontrols.Plugin
 
 	stopChan chan struct{}
 	stopOnce sync.Once
@@ -247,6 +249,10 @@ func (s *WeDropService) initCore() error {
 	s.workspacePlugin = workspace.New()
 	if err := s.registry.Register(s.workspacePlugin, true); err != nil {
 		return fmt.Errorf("register workspace plugin: %w", err)
+	}
+	s.adaptivePlugin = adaptivecontrols.New()
+	if err := s.registry.Register(s.adaptivePlugin, true); err != nil {
+		return fmt.Errorf("register adaptive-controls plugin: %w", err)
 	}
 	s.manager.OnTransferOffer = func(conn *transport.SecureConn, peer protocol.DeviceInfo, offer protocol.TransferOffer) {
 		s.registry.HandleTransferOffer(conn, peer, offer)

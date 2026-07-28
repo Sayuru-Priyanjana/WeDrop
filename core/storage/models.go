@@ -98,8 +98,9 @@ func (s *Settings) Capabilities() []string {
 	if s.AllowMediaControl {
 		caps = append(caps, protocol.CapMedia)
 	}
-	caps = append(caps, protocol.CapWorkspace) // per-device AllowWorkspace gates this further; see TrustedDevice.Allows
-	caps = append(caps, protocol.CapHealth)    // no toggle; always receivable
+	caps = append(caps, protocol.CapWorkspace)        // per-device AllowWorkspace gates this further; see TrustedDevice.Allows
+	caps = append(caps, protocol.CapAdaptiveControls) // always receivable; running a control still goes through AllowWorkspace
+	caps = append(caps, protocol.CapHealth)           // no toggle; always receivable
 	return caps
 }
 

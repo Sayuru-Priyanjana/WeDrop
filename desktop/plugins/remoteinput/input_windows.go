@@ -4,6 +4,7 @@ package remoteinput
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"unsafe"
 
@@ -220,6 +221,21 @@ func resolveKeyVK(key string) (uint16, bool) {
 		return vkEnd, true
 	case protocol.KeyDelete:
 		return vkDelete, true
+	case protocol.KeyF1, protocol.KeyF2, protocol.KeyF3, protocol.KeyF4, protocol.KeyF5,
+		protocol.KeyF6, protocol.KeyF7, protocol.KeyF8, protocol.KeyF9, protocol.KeyF10,
+		protocol.KeyF11, protocol.KeyF12:
+		// VK_F1..VK_F12 are contiguous starting at 0x70 (per winuser.h); "f5"
+		// parses to n=5, giving 0x70+(5-1) = 0x74, matching the existing
+		// vkF5 constant used elsewhere in this file for presentations.
+		n, _ := strconv.Atoi(strings.ToLower(key)[1:])
+		return uint16(0x70 + (n - 1)), true
+	}
+
+	if key == "`" {
+		// VK_OEM_3 — the backtick/tilde key on a standard US keyboard layout
+		// (needed for VS Code's Ctrl+` terminal shortcut); like the rest of
+		// this file's VK-code approach, this assumes a US-like key position.
+		return 0xC0, true
 	}
 
 	if len(key) == 1 {
