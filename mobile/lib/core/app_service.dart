@@ -14,6 +14,7 @@ import 'storage/store.dart';
 import 'transport/connection_manager.dart';
 import 'transport/handshake.dart';
 import 'transport/session.dart';
+import '../plugins/adaptivecontrols/adaptivecontrols_plugin.dart';
 import '../plugins/clipboard/clipboard_plugin.dart';
 import '../plugins/files/files_plugin.dart';
 import '../plugins/health/health_plugin.dart';
@@ -79,6 +80,7 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   late ClipboardPlugin _clipPlugin;
   late MediaPlugin _mediaPlugin;
   late FilesPlugin _filesPlugin;
+  late AdaptiveControlsPlugin _adaptiveControlsPlugin;
 
   /// True once the network stack is fully constructed. Guards the late fields
   /// above so a startup that fails partway — or a test host with no platform
@@ -258,6 +260,8 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
         downloadDir: () => downloadDir,
       );
       _plugins.register(_filesPlugin);
+      _adaptiveControlsPlugin = AdaptiveControlsPlugin();
+      _plugins.register(_adaptiveControlsPlugin);
 
       final port = await _manager.start();
       // The network stack is now safe to touch and tear down.
@@ -429,6 +433,11 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
 
   /// The latest health reported by a peer, or null if none yet.
   DeviceHealth? healthOf(String deviceId) => _healthPlugin.healthOf(deviceId);
+
+  /// What a peer's currently focused desktop app makes available, or null if
+  /// nothing has been reported yet (or no recognized app is focused).
+  AdaptiveControlsState? adaptiveControlsOf(String deviceId) =>
+      _adaptiveControlsPlugin.stateOf(deviceId);
 
   /// The latest media state reported by a peer, or null if none yet.
   MediaState? mediaOf(String deviceId) => _mediaPlugin.mediaOf(deviceId);

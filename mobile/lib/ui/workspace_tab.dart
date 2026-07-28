@@ -49,6 +49,21 @@ const Map<String, IconData> kWorkspaceIcons = {
   'bug': Icons.bug_report_rounded,
   'monitor': Icons.desktop_windows_rounded,
   'grid': Icons.grid_view_rounded,
+  // Added for the built-in dynamic-controls profiles (VS Code, Chrome) —
+  // purely additive, existing buttons are unaffected.
+  'undo': Icons.undo_rounded,
+  'redo': Icons.redo_rounded,
+  'git': Icons.account_tree_rounded,
+  'run': Icons.play_circle_fill_rounded,
+  'debug': Icons.bug_report_rounded,
+  'back': Icons.arrow_back_rounded,
+  'forward': Icons.arrow_forward_rounded,
+  // Added for the generic (every-app) fallback profile.
+  'copy': Icons.content_copy_rounded,
+  'paste': Icons.content_paste_rounded,
+  'cut': Icons.content_cut_rounded,
+  'selectall': Icons.select_all_rounded,
+  'close': Icons.close_rounded,
 };
 
 /// A curated colour palette, not a raw colour wheel — every button reads as
@@ -158,25 +173,96 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.all(Space.lg),
-      child: ReorderableGridView.count(
-        crossAxisCount: 3,
-        mainAxisSpacing: Space.md,
-        crossAxisSpacing: Space.md,
-        childAspectRatio: 0.9,
-        onReorder: _onReorder,
-        footer: [
-          _AddButtonTile(key: const ValueKey('__workspace_add__'), onTap: _openEditor),
-        ],
-        children: [
-          for (final button in _buttons)
-            _WorkspaceButtonTile(
-              key: ValueKey(button.id),
-              button: button,
-              onTap: () => _run(button),
-              onLongPress: () => _openEditor(existing: button),
+    final adaptive = widget.service.adaptiveControlsOf(widget.device.deviceId);
+
+    return Column(
+      children: [
+        if (adaptive != null && adaptive.controls.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Space.lg, Space.lg, Space.lg, 0),
+            child: _DynamicControlsCard(
+              service: widget.service,
+              device: widget.device,
+              state: adaptive,
             ),
+          ),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(Space.lg),
+            child: ReorderableGridView.count(
+              crossAxisCount: 3,
+              mainAxisSpacing: Space.md,
+              crossAxisSpacing: Space.md,
+              childAspectRatio: 0.9,
+              onReorder: _onReorder,
+              footer: [
+                _AddButtonTile(key: const ValueKey('__workspace_add__'), onTap: _openEditor),
+              ],
+              children: [
+                for (final button in _buttons)
+                  _WorkspaceButtonTile(
+                    key: ValueKey(button.id),
+                    button: button,
+                    onTap: () => _run(button),
+                    onLongPress: () => _openEditor(existing: button),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// What the peer's currently focused desktop app makes available — hidden
+/// entirely when no recognized app is focused, since (unlike the permanent
+/// buttons below it) this is transient, auto-generated content rather than
+/// something worth showing an empty state for. Moved here from the Overview
+/// tab so both "what the desktop is doing right now" and "my own custom
+/// actions" live in one place.
+class _DynamicControlsCard extends StatelessWidget {
+  final AppService service;
+  final DeviceView device;
+  final AdaptiveControlsState state;
+
+  const _DynamicControlsCard({required this.service, required this.device, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    return WdCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.auto_awesome_rounded, size: 18, color: WeDropColors.accent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Now on desktop: ${state.appName}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 12.5, fontWeight: FontWeight.w600, color: WeDropColors.inkDim)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (final control in state.controls)
+                SizedBox(
+                  width: 76,
+                  child: WdActionTile(
+                    icon: kWorkspaceIcons[control.icon] ?? Icons.bolt_rounded,
+                    label: control.label,
+                    onTap: () => service.sendWorkspaceAction(device.deviceId, control.action),
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
     );

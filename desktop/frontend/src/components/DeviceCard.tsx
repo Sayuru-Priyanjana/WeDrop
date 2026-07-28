@@ -9,6 +9,7 @@ import {
   IconPlay,
   IconPrev,
   IconSend,
+  IconSettings,
   IconTrash,
   IconVolumeDown,
   IconVolumeUp,
@@ -162,6 +163,12 @@ export function PairedDeviceCard({
             label="Control my media"
             checked={device.allow_media}
             onChange={(v) => onPermission(device.device_id, "media", v)}
+          />
+          <PermissionRow
+            icon={<IconSettings className="h-4 w-4" />}
+            label="Run workspace actions"
+            checked={device.allow_workspace}
+            onChange={(v) => onPermission(device.device_id, "workspace", v)}
           />
         </div>
       )}

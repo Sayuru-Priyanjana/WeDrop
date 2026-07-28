@@ -80,6 +80,7 @@ class Settings {
         if (receiveNotifications) Capability.notifications,
         if (allowMediaControl) Capability.media,
         Capability.workspace,
+        Capability.adaptiveControls,
         Capability.health,
       ];
 

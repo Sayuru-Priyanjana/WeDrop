@@ -41,13 +41,14 @@ const (
 	TypeDeviceInfo MessageType = "device_info"
 
 	// Features (TCP, encrypted)
-	TypeClipboard       MessageType = "clipboard"
-	TypeNotification    MessageType = "notification"
-	TypeMedia           MessageType = "media"
-	TypeMediaState      MessageType = "media_state"
-	TypeHealth          MessageType = "health"
-	TypeRemoteInput     MessageType = "remote_input"
-	TypeWorkspaceAction MessageType = "workspace_action"
+	TypeClipboard        MessageType = "clipboard"
+	TypeNotification     MessageType = "notification"
+	TypeMedia            MessageType = "media"
+	TypeMediaState       MessageType = "media_state"
+	TypeHealth           MessageType = "health"
+	TypeRemoteInput      MessageType = "remote_input"
+	TypeWorkspaceAction  MessageType = "workspace_action"
+	TypeAdaptiveControls MessageType = "adaptive_controls"
 
 	// Transfer (TCP, encrypted, dedicated connection)
 	TypeTransferOffer  MessageType = "transfer_offer"
@@ -186,6 +187,15 @@ const (
 	CapNotifications = "notifications"
 	CapMedia         = "media"
 	CapWorkspace     = "workspace"
+	// CapAdaptiveControls is its own capability (a plugin's ID must be
+	// unique, so this cannot literally be CapWorkspace) purely so a peer can
+	// advertise "I understand this message type" — always advertised
+	// unconditionally by both sides (see Settings.Capabilities), same as
+	// CapFiles/CapWorkspace. The actual authorization to run whatever
+	// action a control carries still goes through the exact same
+	// AllowWorkspace permission as any other workspace action; this
+	// capability only gates whether the schema itself is even sent.
+	CapAdaptiveControls = "adaptive_controls"
 	// CapHealth is always advertised — there is no user-facing toggle for
 	// device-health reporting, unlike the other capabilities.
 	CapHealth = "device-health"
@@ -413,6 +423,21 @@ const (
 	KeyHome      = "home"
 	KeyEnd       = "end"
 	KeyDelete    = "delete"
+
+	// Function keys — added for dynamic controls (e.g. VS Code's Run/Debug),
+	// not previously needed by anything RemoteInput sent.
+	KeyF1  = "f1"
+	KeyF2  = "f2"
+	KeyF3  = "f3"
+	KeyF4  = "f4"
+	KeyF5  = "f5"
+	KeyF6  = "f6"
+	KeyF7  = "f7"
+	KeyF8  = "f8"
+	KeyF9  = "f9"
+	KeyF10 = "f10"
+	KeyF11 = "f11"
+	KeyF12 = "f12"
 )
 
 // WorkspaceAction asks the peer to run one of a user's own custom "My
@@ -457,6 +482,31 @@ const (
 	ModifierShift = "shift"
 	ModifierAlt   = "alt"
 )
+
+// AdaptiveControl is one dynamic, app-provided control the peer's currently
+// focused application makes available — its Action reuses WorkspaceAction
+// verbatim (in every built-in profile so far, a keyboard shortcut), so
+// running one needs no execution path beyond what already handles a
+// workspace button's own action.
+type AdaptiveControl struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	// Icon uses the same curated icon-key vocabulary as WorkspaceButton.icon
+	// (mobile/lib/ui/workspace_tab.dart's kWorkspaceIcons) — a string, not a
+	// platform icon reference, so both clients render it consistently.
+	Icon   string          `json:"icon"`
+	Action WorkspaceAction `json:"action"`
+}
+
+// AdaptiveControlsState is broadcast whenever the peer's foreground app
+// changes (and once when a peer connects, so it need not wait for the next
+// switch to see the current one). Controls is empty when AppName is empty —
+// no recognized app is currently focused.
+type AdaptiveControlsState struct {
+	Type     MessageType       `json:"type"`
+	AppName  string            `json:"app_name"`
+	Controls []AdaptiveControl `json:"controls"`
+}
 
 // TransferOffer announces an incoming file on a dedicated transfer connection.
 type TransferOffer struct {
