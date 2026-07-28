@@ -22,6 +22,64 @@ class WeDropColors {
   static const inkFaint = Color(0xFF6B7699);
 }
 
+/// Spacing on a 4pt grid. Using these instead of ad-hoc numbers is what keeps
+/// vertical rhythm consistent between screens that were written months apart.
+class Space {
+  static const xs = 4.0;
+  static const sm = 8.0;
+  static const md = 12.0;
+  static const lg = 16.0;
+  static const xl = 24.0;
+}
+
+/// Corner radii, scaled to the element's size: controls are tighter than the
+/// cards that contain them, cards tighter than sheets.
+class Radii {
+  static const control = 12.0;
+  static const card = 20.0;
+  static const sheet = 24.0;
+  static const pill = 999.0;
+}
+
+/// The type scale. Every size in the app comes from here — the alternative
+/// (an inline TextStyle per widget) is how a UI ends up with 11, 11.5, 12,
+/// 12.5, 13 and 13.5 all in use for what is visually the same thing.
+class AppText {
+  /// Card and row headings.
+  static const title = TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.w600,
+    color: WeDropColors.ink,
+    letterSpacing: -0.1,
+  );
+
+  /// The small uppercase heading that labels a section *inside* a card, as
+  /// opposed to [SectionHeader], which titles a whole page section.
+  static const eyebrow = TextStyle(
+    fontSize: 11,
+    fontWeight: FontWeight.w600,
+    color: WeDropColors.inkFaint,
+    letterSpacing: 0.8,
+  );
+
+  /// Default reading size for list rows and primary values.
+  static const body = TextStyle(fontSize: 14, color: WeDropColors.ink);
+
+  /// Secondary text: subtitles, supporting detail.
+  static const label = TextStyle(fontSize: 13, color: WeDropColors.inkDim);
+
+  /// Tertiary text: timestamps, hints, units.
+  static const caption = TextStyle(fontSize: 12, color: WeDropColors.inkFaint);
+
+  /// Numeric readouts (timers, percentages) — tabular figures stop the text
+  /// jittering horizontally as the digits tick over.
+  static const numeric = TextStyle(
+    fontSize: 12,
+    color: WeDropColors.inkFaint,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+}
+
 ThemeData buildWeDropTheme() {
   const scheme = ColorScheme.dark(
     primary: WeDropColors.brand,

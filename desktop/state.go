@@ -24,6 +24,7 @@ type DeviceView struct {
 	AllowFiles         bool `json:"allow_files"`
 	AllowNotifications bool `json:"allow_notifications"`
 	AllowMedia         bool `json:"allow_media"`
+	AllowWorkspace     bool `json:"allow_workspace"`
 
 	PairedAt int64 `json:"paired_at"`
 	LastSeen int64 `json:"last_seen"`

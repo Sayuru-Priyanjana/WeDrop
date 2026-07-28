@@ -61,6 +61,7 @@ func (ts *TrustStore) Add(device storage.TrustedDevice) error {
 		device.AllowFiles = existing.AllowFiles
 		device.AllowNotifications = existing.AllowNotifications
 		device.AllowMedia = existing.AllowMedia
+		device.AllowWorkspace = existing.AllowWorkspace
 	} else {
 		device.PairedAt = time.Now().UnixMilli()
 		device.DefaultPermissions()
@@ -101,6 +102,8 @@ func (ts *TrustStore) SetPermission(deviceID, capability string, allowed bool) e
 		device.AllowNotifications = allowed
 	case "media":
 		device.AllowMedia = allowed
+	case "workspace":
+		device.AllowWorkspace = allowed
 	default:
 		ts.mu.Unlock()
 		return fmt.Errorf("unknown capability %q", capability)

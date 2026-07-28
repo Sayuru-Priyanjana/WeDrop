@@ -34,6 +34,7 @@ class MsgType {
   static const mediaState = 'media_state';
   static const health = 'health';
   static const remoteInput = 'remote_input';
+  static const workspaceAction = 'workspace_action';
 
   static const transferOffer = 'transfer_offer';
   static const transferAccept = 'transfer_accept';
@@ -69,6 +70,7 @@ class Capability {
   static const files = 'files';
   static const notifications = 'notifications';
   static const media = 'media';
+  static const workspace = 'workspace';
   // No toggle; always advertised.
   static const health = 'device-health';
 }
@@ -507,6 +509,56 @@ class RemoteInput {
         if (dy != 0) 'dy': dy,
         if (text.isNotEmpty) 'text': text,
         if (key.isNotEmpty) 'key': key,
+      };
+}
+
+/// Actions a "My Workspace" button can request on the peer.
+class WorkspaceActionType {
+  static const shortcut = 'shortcut';
+  static const openApp = 'open_app';
+  static const openFolder = 'open_folder';
+  static const openUrl = 'open_url';
+  static const shellCommand = 'shell_command';
+}
+
+/// Modifier names carried in [WorkspaceAction.modifiers].
+class Modifier {
+  static const ctrl = 'ctrl';
+  static const shift = 'shift';
+  static const alt = 'alt';
+}
+
+/// Runs one of a user's own custom "My Workspace" buttons on the peer — a
+/// phone-triggers-local-action message with no broadcast state, the same
+/// shape as [RemoteInput]. Kept as its own message rather than folded into
+/// RemoteInput since its actions have nothing to do with mouse/keyboard
+/// synthesis except the shortcut case, which the peer implements by reusing
+/// its own RemoteInput machinery.
+class WorkspaceAction {
+  final String action;
+  final List<String> modifiers;
+  final String key;
+  final String path;
+  final String url;
+  final String command;
+
+  const WorkspaceAction({
+    required this.action,
+    this.modifiers = const [],
+    this.key = '',
+    this.path = '',
+    this.url = '',
+    this.command = '',
+  });
+
+  Map<String, dynamic> toJson() => {
+        'type': MsgType.workspaceAction,
+        'action': action,
+        if (modifiers.isNotEmpty) 'modifiers': modifiers,
+        if (key.isNotEmpty) 'key': key,
+        if (path.isNotEmpty) 'path': path,
+        if (url.isNotEmpty) 'url': url,
+        if (command.isNotEmpty) 'command': command,
       };
 }
 

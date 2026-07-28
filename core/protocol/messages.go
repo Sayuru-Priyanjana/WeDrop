@@ -41,12 +41,13 @@ const (
 	TypeDeviceInfo MessageType = "device_info"
 
 	// Features (TCP, encrypted)
-	TypeClipboard    MessageType = "clipboard"
-	TypeNotification MessageType = "notification"
-	TypeMedia        MessageType = "media"
-	TypeMediaState   MessageType = "media_state"
-	TypeHealth       MessageType = "health"
-	TypeRemoteInput  MessageType = "remote_input"
+	TypeClipboard       MessageType = "clipboard"
+	TypeNotification    MessageType = "notification"
+	TypeMedia           MessageType = "media"
+	TypeMediaState      MessageType = "media_state"
+	TypeHealth          MessageType = "health"
+	TypeRemoteInput     MessageType = "remote_input"
+	TypeWorkspaceAction MessageType = "workspace_action"
 
 	// Transfer (TCP, encrypted, dedicated connection)
 	TypeTransferOffer  MessageType = "transfer_offer"
@@ -184,6 +185,7 @@ const (
 	CapFiles         = "files"
 	CapNotifications = "notifications"
 	CapMedia         = "media"
+	CapWorkspace     = "workspace"
 	// CapHealth is always advertised — there is no user-facing toggle for
 	// device-health reporting, unlike the other capabilities.
 	CapHealth = "device-health"
@@ -350,7 +352,7 @@ type MediaState struct {
 type DeviceHealth struct {
 	Type        MessageType `json:"type"`
 	DeviceID    string      `json:"device_id"`
-	Battery     int         `json:"battery"`      // 0-100, -1 unknown (e.g. a desktop with no battery)
+	Battery     int         `json:"battery"` // 0-100, -1 unknown (e.g. a desktop with no battery)
 	Charging    bool        `json:"charging"`
 	CPUPercent  int         `json:"cpu_percent"`  // 0-100, -1 unknown
 	MemPercent  int         `json:"mem_percent"`  // 0-100, -1 unknown
@@ -411,6 +413,49 @@ const (
 	KeyHome      = "home"
 	KeyEnd       = "end"
 	KeyDelete    = "delete"
+)
+
+// WorkspaceAction asks the peer to run one of a user's own custom "My
+// Workspace" buttons — a phone-triggers-local-action message with no
+// broadcast state, the same shape as RemoteInput. Kept as its own message
+// type (rather than folded into RemoteInput) since its actions have nothing
+// to do with mouse/keyboard synthesis except the shortcut case, which reuses
+// RemoteInput's own SendInput machinery under the hood.
+type WorkspaceAction struct {
+	Type   MessageType `json:"type"`
+	Action string      `json:"action"` // Workspace* below
+
+	// Shortcut: Modifiers held down while Key is pressed. Key is either a
+	// single letter/digit or one of the RemoteInput SpecialKey names above —
+	// this is a separate, dedicated surface for combos (Ctrl+Shift+P), not a
+	// change to RemoteInput's own single-key path.
+	Modifiers []string `json:"modifiers,omitempty"`
+	Key       string   `json:"key,omitempty"`
+
+	// OpenApp / OpenFolder: a local path on the peer.
+	Path string `json:"path,omitempty"`
+	// OpenURL: opened in the peer's default browser.
+	URL string `json:"url,omitempty"`
+	// ShellCommand: run verbatim through the peer's shell. Gated by the
+	// peer's own AllowAutomation permission — a workspace button existing
+	// does not by itself mean shell commands are allowed.
+	Command string `json:"command,omitempty"`
+}
+
+// Workspace button actions.
+const (
+	WorkspaceShortcut     = "shortcut"
+	WorkspaceOpenApp      = "open_app"
+	WorkspaceOpenFolder   = "open_folder"
+	WorkspaceOpenURL      = "open_url"
+	WorkspaceShellCommand = "shell_command"
+)
+
+// Modifier names carried in WorkspaceAction.Modifiers.
+const (
+	ModifierCtrl  = "ctrl"
+	ModifierShift = "shift"
+	ModifierAlt   = "alt"
 )
 
 // TransferOffer announces an incoming file on a dedicated transfer connection.

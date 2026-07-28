@@ -357,6 +357,7 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
                     device.allowNotifications,
                   ),
                   _permission('Control my media', Capability.media, device.allowMedia),
+                  _permission('Run workspace actions', Capability.workspace, device.allowWorkspace),
                 ],
               ),
             ),
@@ -1010,6 +1011,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 control: Switch(
                   value: settings.allowMediaControl,
                   onChanged: (v) => _patch((s) => s.allowMediaControl = v),
+                ),
+              ),
+              SettingTile(
+                title: 'Allow shell/script commands',
+                description: 'Off by default. Lets a "My Workspace" button run an arbitrary '
+                    'command on this device — only turn this on for devices you fully trust.',
+                control: Switch(
+                  value: settings.allowAutomation,
+                  onChanged: (v) => _patch((s) => s.allowAutomation = v),
                 ),
                 last: true,
               ),

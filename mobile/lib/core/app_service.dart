@@ -36,6 +36,7 @@ class DeviceView {
   final bool allowFiles;
   final bool allowNotifications;
   final bool allowMedia;
+  final bool allowWorkspace;
 
   const DeviceView({
     required this.deviceId,
@@ -51,6 +52,7 @@ class DeviceView {
     this.allowFiles = true,
     this.allowNotifications = true,
     this.allowMedia = true,
+    this.allowWorkspace = true,
   });
 }
 
@@ -146,6 +148,7 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
         allowFiles: device.allowFiles,
         allowNotifications: device.allowNotifications,
         allowMedia: device.allowMedia,
+        allowWorkspace: device.allowWorkspace,
       );
     }).toList();
   }
@@ -441,6 +444,29 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     } catch (_) {
       // The device dropped off; the UI will reflect it on the next rebuild.
     }
+  }
+
+  /// Runs one "My Workspace" button's action on a device — the phone-side
+  /// counterpart to the desktop's workspace plugin. Failures are surfaced as
+  /// a toast (unlike sendRemoteInput's silent drop): a workspace button is a
+  /// deliberate, named action the user just tapped, so a shell command
+  /// blocked by the peer's AllowAutomation setting (or any other failure)
+  /// should not look identical to it having quietly worked.
+  Future<void> sendWorkspaceAction(String deviceId, WorkspaceAction action) async {
+    try {
+      await _manager.sendTo(deviceId, action.toJson());
+    } catch (error) {
+      final name = _store.trusted(deviceId)?.name ?? 'that device';
+      _toastController.add('Could not run that on $name: $error');
+    }
+  }
+
+  /// This device's own "My Workspace" buttons, in display order.
+  List<WorkspaceButton> workspaceButtonsFor(String deviceId) => _store.workspaceButtons(deviceId);
+
+  Future<void> saveWorkspaceButtons(String deviceId, List<WorkspaceButton> buttons) async {
+    await _store.saveWorkspaceButtons(deviceId, buttons);
+    notifyListeners();
   }
 
   void _onDeviceInfo(Session session, DeviceInfo info) {

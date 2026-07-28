@@ -3,6 +3,7 @@
 package remoteinput
 
 import (
+	"fmt"
 	"strings"
 	"unsafe"
 
@@ -182,34 +183,96 @@ const (
 )
 
 func pressNamedKey(key string) {
-	var vk uint16
+	if vk, ok := resolveKeyVK(key); ok {
+		tapVK(vk)
+	}
+}
+
+// resolveKeyVK maps a RemoteInput/WorkspaceAction key name to its virtual-key
+// code: one of the named special keys above, or (new, for PressShortcut —
+// nothing currently sends this through the plain InputKey path, so this is
+// additive and does not change pressNamedKey's existing behaviour) a single
+// letter or digit, which Windows conveniently assigns the same VK code as its
+// own uppercase ASCII value.
+func resolveKeyVK(key string) (uint16, bool) {
 	switch strings.ToLower(key) {
 	case protocol.KeyBackspace:
-		vk = vkBack
+		return vkBack, true
 	case protocol.KeyEnter:
-		vk = vkReturn
+		return vkReturn, true
 	case protocol.KeyTab:
-		vk = vkTab
+		return vkTab, true
 	case protocol.KeyEscape:
-		vk = vkEscape
+		return vkEscape, true
 	case protocol.KeySpace:
-		vk = vkSpace
+		return vkSpace, true
 	case protocol.KeyUp:
-		vk = vkUp
+		return vkUp, true
 	case protocol.KeyDown:
-		vk = vkDown
+		return vkDown, true
 	case protocol.KeyLeft:
-		vk = vkLeft
+		return vkLeft, true
 	case protocol.KeyRight:
-		vk = vkRight
+		return vkRight, true
 	case protocol.KeyHome:
-		vk = vkHome
+		return vkHome, true
 	case protocol.KeyEnd:
-		vk = vkEnd
+		return vkEnd, true
 	case protocol.KeyDelete:
-		vk = vkDelete
-	default:
-		return
+		return vkDelete, true
 	}
+
+	if len(key) == 1 {
+		c := strings.ToUpper(key)[0]
+		if (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
+			return uint16(c), true
+		}
+	}
+	return 0, false
+}
+
+// Modifier virtual-key codes, per Windows' winuser.h.
+const (
+	vkControl = 0x11
+	vkShift   = 0x10
+	vkMenu    = 0x12 // Alt
+)
+
+func modifierVK(name string) (uint16, bool) {
+	switch strings.ToLower(name) {
+	case protocol.ModifierCtrl:
+		return vkControl, true
+	case protocol.ModifierShift:
+		return vkShift, true
+	case protocol.ModifierAlt:
+		return vkMenu, true
+	}
+	return 0, false
+}
+
+// PressShortcut holds down each modifier (in order), taps key, then releases
+// the modifiers in reverse order — e.g. Ctrl+Shift+P. Exported for other
+// plugins (workspace) that need a modifier combo beyond RemoteInput's own
+// single-key InputKey action; reuses this file's own already-verified
+// SendInput plumbing rather than a second copy of it.
+func PressShortcut(modifiers []string, key string) error {
+	vk, ok := resolveKeyVK(key)
+	if !ok {
+		return fmt.Errorf("unknown key %q", key)
+	}
+
+	held := make([]uint16, 0, len(modifiers))
+	for _, m := range modifiers {
+		if mvk, ok := modifierVK(m); ok {
+			sendKeyVK(mvk, false)
+			held = append(held, mvk)
+		}
+	}
+
 	tapVK(vk)
+
+	for i := len(held) - 1; i >= 0; i-- {
+		sendKeyVK(held[i], true)
+	}
+	return nil
 }
