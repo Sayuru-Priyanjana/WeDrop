@@ -14,6 +14,8 @@ import (
 	"wedrop/core/protocol"
 	"wedrop/core/storage"
 	"wedrop/core/transport"
+
+	"desktop/plugins/adaptivecontrols"
 )
 
 // This file holds every method bound into the frontend. They are the app's
@@ -559,6 +561,49 @@ func (s *WeDropService) MarkNotificationsRead() {
 func (s *WeDropService) ClearNotifications() {
 	s.notifsPlugin.Clear()
 	s.pushState()
+}
+
+// ---------------------------------------------------------------- app actions
+
+// ListAppActionProfiles returns every app that has Dynamic Controls buttons
+// configured — both the built-in ones (Predefined: true on each action) and
+// anything the user has added or edited — for the App Actions editor.
+func (s *WeDropService) ListAppActionProfiles() []adaptivecontrols.AppProfile {
+	return s.adaptivePlugin.Store().List()
+}
+
+// SaveAppActionProfile replaces (or creates) one app's whole action list —
+// the editor always resends the full edited profile, the same
+// resend-the-whole-object pattern the phone already uses for its own
+// WorkspaceButton list, rather than a granular per-action RPC.
+func (s *WeDropService) SaveAppActionProfile(profile adaptivecontrols.AppProfile) error {
+	return s.adaptivePlugin.Store().Upsert(profile)
+}
+
+// DeleteAppActionProfile removes a whole app's profile — it goes back to
+// showing no Dynamic Controls buttons until reconfigured.
+func (s *WeDropService) DeleteAppActionProfile(exe string) error {
+	return s.adaptivePlugin.Store().Delete(exe)
+}
+
+// ---------------------------------------------------------------- my buttons
+
+// GetWorkspaceButtons returns this desktop's "My Workspace" buttons — one
+// shared list every paired phone sees, authored entirely here (App Actions
+// and My Buttons are both attributes of the desktop being controlled, not
+// of whichever phone is controlling it).
+func (s *WeDropService) GetWorkspaceButtons() []protocol.WorkspaceButtonDef {
+	return s.workspacePlugin.Buttons().Get()
+}
+
+// SaveWorkspaceButtons replaces the whole button list and pushes the change
+// to every currently connected, permitted phone immediately.
+func (s *WeDropService) SaveWorkspaceButtons(buttons []protocol.WorkspaceButtonDef) error {
+	if err := s.workspacePlugin.Buttons().Set(buttons); err != nil {
+		return err
+	}
+	s.workspacePlugin.PushButtons()
+	return nil
 }
 
 // ---------------------------------------------------------------- diagnostics

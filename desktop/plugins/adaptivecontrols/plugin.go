@@ -13,6 +13,7 @@ package adaptivecontrols
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"wedrop/core/plugin"
@@ -34,17 +35,31 @@ const pollInterval = 1500 * time.Millisecond
 // Plugin implements plugin.Plugin for adaptive per-app controls.
 type Plugin struct {
 	api     plugin.API
+	store   *Store
 	cancel  context.CancelFunc
 	lastApp string // last-broadcast app name; "" means "nothing recognized"
 }
 
-// New creates the adaptive-controls plugin.
-func New() *Plugin { return &Plugin{} }
+// New creates the adaptive-controls plugin. path is where its editable
+// per-app action profiles are persisted (see store.go) — plain JSON, no
+// encryption needed since none of this is sensitive, unlike settings.json.
+func New(path string) *Plugin {
+	return &Plugin{store: newStore(path)}
+}
+
+// Store exposes the plugin's app-action profile store to desktop/api.go's
+// Wails-bound methods, so the frontend's App Actions editor can read and
+// edit it directly.
+func (p *Plugin) Store() *Store { return p.store }
 
 func (p *Plugin) ID() plugin.ID { return ID }
 
-// MessageTypes is empty: this plugin only ever sends, never receives.
-func (p *Plugin) MessageTypes() []protocol.MessageType { return nil }
+// MessageTypes: broadcast-only for the controls themselves, but this plugin
+// also receives one thing from the phone — a request to open the desktop's
+// App Actions editor for the app currently on screen (see HandleMessage).
+func (p *Plugin) MessageTypes() []protocol.MessageType {
+	return []protocol.MessageType{protocol.TypeConfigureApp}
+}
 
 func (p *Plugin) Init(api plugin.API) error {
 	p.api = api
@@ -52,6 +67,28 @@ func (p *Plugin) Init(api plugin.API) error {
 }
 
 func (p *Plugin) HandleMessage(from plugin.PeerRef, msgType protocol.MessageType, raw []byte) error {
+	// This plugin's own capability (CapAdaptiveControls) has no case in
+	// TrustedDevice.Allows — it exists only so a peer can advertise "I
+	// understand this message type" (see the ID doc comment above). The
+	// real authorization is the same AllowWorkspace permission every other
+	// workspace action already goes through.
+	if !p.api.AllowsCapability(from.DeviceID, protocol.CapWorkspace) {
+		return nil
+	}
+
+	var msg protocol.ConfigureAppRequest
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		return err
+	}
+	if msg.AppName == "" {
+		return nil
+	}
+
+	// Bring the desktop window to front and tell its frontend which app to
+	// preselect in the App Actions editor — see pluginHost.Emit's
+	// adaptivecontrols.ID case in desktop/service.go for the event bridge.
+	p.api.ShowWindow()
+	p.api.Emit("configure", msg.AppName)
 	return nil
 }
 
@@ -120,10 +157,42 @@ func (p *Plugin) sendTo(deviceID string, state protocol.AdaptiveControlsState) {
 }
 
 func (p *Plugin) currentState() protocol.AdaptiveControlsState {
-	controls, appName := profileFor(currentForegroundProcess())
-	return protocol.AdaptiveControlsState{
-		Type:     protocol.TypeAdaptiveControls,
-		AppName:  appName,
-		Controls: controls,
+	exe := currentForegroundProcess()
+	if exe == "" || selfExeNames[exe] {
+		return protocol.AdaptiveControlsState{Type: protocol.TypeAdaptiveControls}
 	}
+
+	if profile, ok := p.store.Get(exe); ok {
+		return protocol.AdaptiveControlsState{
+			Type:     protocol.TypeAdaptiveControls,
+			AppName:  profile.DisplayName,
+			Exe:      exe,
+			Controls: toProtocolControls(profile.Actions),
+		}
+	}
+
+	// No profile for this app — report its name and exe (so the phone can
+	// offer "Configure this app") but zero predefined controls. Deliberately
+	// no generic fallback: an app with nothing configured shows nothing
+	// until the user configures it, rather than the same nine buttons every
+	// app used to get.
+	return protocol.AdaptiveControlsState{
+		Type:    protocol.TypeAdaptiveControls,
+		AppName: friendlyName(exe),
+		Exe:     exe,
+	}
+}
+
+func toProtocolControls(actions []AppAction) []protocol.AdaptiveControl {
+	out := make([]protocol.AdaptiveControl, len(actions))
+	for i, a := range actions {
+		out[i] = protocol.AdaptiveControl{
+			ID:     a.ID,
+			Label:  a.Label,
+			Icon:   a.Icon,
+			Color:  a.ColorValue,
+			Action: a.Action,
+		}
+	}
+	return out
 }

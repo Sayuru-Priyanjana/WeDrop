@@ -21,6 +21,7 @@ import '../plugins/health/health_plugin.dart';
 import '../plugins/media/media_plugin.dart';
 import '../plugins/minimizedapps/minimizedapps_plugin.dart';
 import '../plugins/notifications/notifications_plugin.dart';
+import '../plugins/workspacebuttons/workspacebuttons_plugin.dart';
 
 /// A device as the UI sees it: trust store, discovery and session state merged.
 class DeviceView {
@@ -83,6 +84,7 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   late FilesPlugin _filesPlugin;
   late AdaptiveControlsPlugin _adaptiveControlsPlugin;
   late MinimizedAppsPlugin _minimizedAppsPlugin;
+  late WorkspaceButtonsPlugin _workspaceButtonsPlugin;
 
   /// True once the network stack is fully constructed. Guards the late fields
   /// above so a startup that fails partway — or a test host with no platform
@@ -266,6 +268,8 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
       _plugins.register(_adaptiveControlsPlugin);
       _minimizedAppsPlugin = MinimizedAppsPlugin();
       _plugins.register(_minimizedAppsPlugin);
+      _workspaceButtonsPlugin = WorkspaceButtonsPlugin();
+      _plugins.register(_workspaceButtonsPlugin);
 
       final port = await _manager.start();
       // The network stack is now safe to touch and tear down.
@@ -484,13 +488,31 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   Future<void> restoreWindow(String deviceId, int windowId) =>
       sendWorkspaceAction(deviceId, WorkspaceAction(action: WorkspaceActionType.restoreWindow, windowId: windowId));
 
-  /// This device's own "My Workspace" buttons, in display order.
-  List<WorkspaceButton> workspaceButtonsFor(String deviceId) => _store.workspaceButtons(deviceId);
-
-  Future<void> saveWorkspaceButtons(String deviceId, List<WorkspaceButton> buttons) async {
-    await _store.saveWorkspaceButtons(deviceId, buttons);
-    notifyListeners();
+  /// Asks the peer to open its App Actions editor for an app with no
+  /// Dynamic Controls profile yet — tapping "Configure this app".
+  Future<void> requestConfigureApp(String deviceId, String appName) async {
+    try {
+      await _manager.sendTo(deviceId, ConfigureAppRequest(appName: appName).toJson());
+    } catch (error) {
+      final name = _store.trusted(deviceId)?.name ?? 'that device';
+      _toastController.add('Could not reach $name: $error');
+    }
   }
+
+  /// Asks the peer to open its My Buttons editor for this device — tapping
+  /// "Configure on desktop" when no buttons are set up yet.
+  Future<void> requestConfigureButtons(String deviceId) async {
+    try {
+      await _manager.sendTo(deviceId, const ConfigureButtonsRequest().toJson());
+    } catch (error) {
+      final name = _store.trusted(deviceId)?.name ?? 'that device';
+      _toastController.add('Could not reach $name: $error');
+    }
+  }
+
+  /// This device's own "My Workspace" buttons, authored entirely on the
+  /// desktop — read-only here, in the order the desktop sent them.
+  List<WorkspaceButtonDef> workspaceButtonsOf(String deviceId) => _workspaceButtonsPlugin.buttonsOf(deviceId);
 
   /// This device's saved Workspace-tab layouts (auto-creating "Default" on
   /// first access).

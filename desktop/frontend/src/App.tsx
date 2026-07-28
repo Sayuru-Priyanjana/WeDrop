@@ -4,8 +4,11 @@ import {
   ClearClipboardHistory,
   ClearNotifications,
   CopyToClipboard,
+  DeleteAppActionProfile,
   GetDiagnostics,
   GetState,
+  GetWorkspaceButtons,
+  ListAppActionProfiles,
   MarkNotificationsRead,
   OpenDownloadsFolder,
   PairDevice,
@@ -13,6 +16,8 @@ import {
   RespondToPairing,
   RespondToTransfer,
   RevealFile,
+  SaveAppActionProfile,
+  SaveWorkspaceButtons,
   SelectFiles,
   SendFiles,
   SendMediaCommand,
@@ -22,9 +27,10 @@ import {
   UnpairDevice,
   UpdateSettings,
 } from "../wailsjs/go/main/WeDropService";
-import type { main, storage } from "../wailsjs/go/models";
+import type { adaptivecontrols, main, storage } from "../wailsjs/go/models";
 import { EventsOn } from "../wailsjs/runtime/runtime";
 
+import { AppActionsPanel } from "./components/AppActionsPanel";
 import { DiscoveredDeviceCard, PairedDeviceCard } from "./components/DeviceCard";
 import {
   ConfirmUnpairModal,
@@ -32,14 +38,17 @@ import {
   OutgoingPairingModal,
   PairingRequestModal,
 } from "./components/Modals";
+import { MyButtonsPanel } from "./components/MyButtonsPanel";
 import { ClipboardPanel, NotificationsPanel, TransfersPanel } from "./components/Panels";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { Toasts, type Toast } from "./components/Toasts";
 import { Badge, Button, EmptyState, SectionTitle } from "./components/ui";
 import {
   IconBell,
+  IconButtonRow,
   IconClipboard,
   IconDevices,
+  IconGrid,
   IconRadar,
   IconSettings,
   IconTransfer,
@@ -47,13 +56,22 @@ import {
 } from "./lib/icons";
 import { errorMessage } from "./lib/format";
 
-type Tab = "devices" | "transfers" | "clipboard" | "notifications" | "settings";
+type Tab =
+  | "devices"
+  | "transfers"
+  | "clipboard"
+  | "notifications"
+  | "appactions"
+  | "mybuttons"
+  | "settings";
 
 const TABS: { id: Tab; label: string; icon: typeof IconDevices }[] = [
   { id: "devices", label: "Ecosystem", icon: IconDevices },
   { id: "transfers", label: "Transfers", icon: IconTransfer },
   { id: "clipboard", label: "Clipboard", icon: IconClipboard },
   { id: "notifications", label: "Notifications", icon: IconBell },
+  { id: "appactions", label: "App Actions", icon: IconGrid },
+  { id: "mybuttons", label: "My Buttons", icon: IconButtonRow },
   { id: "settings", label: "Settings", icon: IconSettings },
 ];
 
@@ -66,6 +84,8 @@ export default function App() {
   const [incomingFile, setIncomingFile] = useState<main.TransferView | null>(null);
   const [unpairTarget, setUnpairTarget] = useState<main.DeviceView | null>(null);
   const [diagnostics, setDiagnostics] = useState<main.Diagnostics | null>(null);
+  const [appProfiles, setAppProfiles] = useState<adaptivecontrols.AppProfile[]>([]);
+  const [configureTarget, setConfigureTarget] = useState<string | null>(null);
 
   const toastId = useRef(0);
 
@@ -88,8 +108,15 @@ export default function App() {
       });
   }, []);
 
+  const loadAppProfiles = useCallback(() => {
+    ListAppActionProfiles()
+      .then((profiles) => setAppProfiles(profiles ?? []))
+      .catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     refresh();
+    loadAppProfiles();
 
     // The backend pushes a coalesced snapshot whenever anything changes, so the
     // UI does not poll. The slow interval below is only a safety net in case an
@@ -113,6 +140,16 @@ export default function App() {
         });
       }),
       EventsOn("clipboard:received", (from: string) => pushToast("info", `Clipboard from ${from}`)),
+      // A paired phone tapped "Configure this app" for something with no
+      // profile yet — jump to the App Actions tab pre-selected on it.
+      EventsOn("app-actions:open", (exe: string) => {
+        setConfigureTarget(exe);
+        setTab("appactions");
+      }),
+      // A paired phone tapped "Configure on desktop" for its (empty) My
+      // Buttons — jump to the My Buttons tab. Nothing to preselect: it's one
+      // shared list for every phone, not per-device.
+      EventsOn("my-buttons:open", () => setTab("mybuttons")),
     ];
 
     const safetyNet = setInterval(refresh, 15000);
@@ -121,7 +158,7 @@ export default function App() {
       unsubscribers.forEach((off) => off());
       clearInterval(safetyNet);
     };
-  }, [refresh, pushToast]);
+  }, [refresh, loadAppProfiles, pushToast]);
 
   // Clear the unread badge the moment the user actually looks at the feed.
   useEffect(() => {
@@ -229,6 +266,30 @@ export default function App() {
             <NotificationsPanel
               notifications={state.notifications}
               onClear={() => ClearNotifications()}
+            />
+          )}
+
+          {tab === "appactions" && (
+            <AppActionsPanel
+              profiles={appProfiles}
+              initialExe={configureTarget}
+              onSave={async (profile) => {
+                await run(SaveAppActionProfile(profile), "Saved");
+                loadAppProfiles();
+              }}
+              onDelete={async (exe) => {
+                await run(DeleteAppActionProfile(exe), "Removed");
+                loadAppProfiles();
+              }}
+            />
+          )}
+
+          {tab === "mybuttons" && (
+            <MyButtonsPanel
+              onLoad={() => GetWorkspaceButtons()}
+              onSave={async (buttons) => {
+                await run(SaveWorkspaceButtons(buttons), "Saved");
+              }}
             />
           )}
 

@@ -190,6 +190,24 @@ export const IconCopy = (p: IconProps) => (
   </Icon>
 );
 
+export const IconGrid = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="3" y="3" width="7" height="7" rx="1.5" />
+    <rect x="14" y="3" width="7" height="7" rx="1.5" />
+    <rect x="3" y="14" width="7" height="7" rx="1.5" />
+    <rect x="14" y="14" width="7" height="7" rx="1.5" />
+  </Icon>
+);
+
+export const IconButtonRow = (p: IconProps) => (
+  <Icon {...p}>
+    <rect x="3" y="4" width="6" height="6" rx="1.5" />
+    <rect x="12" y="4" width="9" height="6" rx="1.5" />
+    <rect x="3" y="14" width="9" height="6" rx="1.5" />
+    <rect x="15" y="14" width="6" height="6" rx="1.5" />
+  </Icon>
+);
+
 /** Choose the right silhouette for a device's form factor. */
 export function deviceIcon(formFactor: string) {
   switch (formFactor) {

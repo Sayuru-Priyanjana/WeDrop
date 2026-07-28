@@ -20,7 +20,6 @@ const _keyPublic = 'wedrop.identity_public';
 const _keyName = 'wedrop.device_name';
 const _keySettings = 'wedrop.settings';
 const _keyTrusted = 'wedrop.trusted_devices';
-const _keyWorkspace = 'wedrop.workspace_buttons';
 const _keyLayouts = 'wedrop.workspace_layouts';
 const _keyActiveLayout = 'wedrop.active_layout';
 
@@ -225,49 +224,6 @@ class TrustedDevice {
       );
 }
 
-/// One user-defined "My Workspace" button — scoped to a single paired
-/// desktop (a button like "open VS Code" only means something on the
-/// specific machine it targets), not a global cross-device profile.
-class WorkspaceButton {
-  final String id;
-  String label;
-  String icon;
-  int colorValue;
-  String actionType; // WorkspaceActionType.*
-  Map<String, dynamic> actionParams;
-  int order;
-
-  WorkspaceButton({
-    required this.id,
-    required this.label,
-    required this.icon,
-    required this.colorValue,
-    required this.actionType,
-    this.actionParams = const {},
-    this.order = 0,
-  });
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'label': label,
-        'icon': icon,
-        'color_value': colorValue,
-        'action_type': actionType,
-        'action_params': actionParams,
-        'order': order,
-      };
-
-  factory WorkspaceButton.fromJson(Map<String, dynamic> json) => WorkspaceButton(
-        id: json['id'] as String? ?? '',
-        label: json['label'] as String? ?? '',
-        icon: json['icon'] as String? ?? '',
-        colorValue: json['color_value'] as int? ?? 0xFF4F7CFF,
-        actionType: json['action_type'] as String? ?? '',
-        actionParams: (json['action_params'] as Map?)?.cast<String, dynamic>() ?? const {},
-        order: json['order'] as int? ?? 0,
-      );
-}
-
 /// The built-in Workspace-tab widget types. A "widget" here is one card in
 /// the tab's layout — the same content that used to be permanently stacked
 /// (desktop switcher, dynamic controls, My-buttons grid) plus the new
@@ -380,7 +336,6 @@ class WeDropStore {
   late Settings settings;
   late String deviceName;
   final Map<String, TrustedDevice> _trusted = {};
-  final Map<String, List<WorkspaceButton>> _workspace = {};
   final Map<String, List<WorkspaceLayout>> _layouts = {};
   final Map<String, String> _activeLayout = {};
 
@@ -438,19 +393,6 @@ class WeDropStore {
       } catch (_) {
         // A corrupt list must not stop the app from starting; the user can
         // pair again. Refusing to launch would be far worse.
-      }
-    }
-
-    final workspaceRaw = _prefs.getString(_keyWorkspace);
-    if (workspaceRaw != null) {
-      try {
-        (jsonDecode(workspaceRaw) as Map<String, dynamic>).forEach((deviceId, buttons) {
-          _workspace[deviceId] = (buttons as List)
-              .map((e) => WorkspaceButton.fromJson(e as Map<String, dynamic>))
-              .toList();
-        });
-      } catch (_) {
-        // A corrupt map must not stop the app from starting.
       }
     }
 
@@ -551,24 +493,6 @@ class WeDropStore {
   Future<void> _saveTrusted() async {
     final list = _trusted.values.map((d) => d.toJson()).toList();
     await _prefs.setString(_keyTrusted, jsonEncode(list));
-  }
-
-  /// This device's own "My Workspace" buttons, in display order.
-  List<WorkspaceButton> workspaceButtons(String deviceId) {
-    final list = List.of(_workspace[deviceId] ?? const <WorkspaceButton>[]);
-    list.sort((a, b) => a.order.compareTo(b.order));
-    return list;
-  }
-
-  Future<void> saveWorkspaceButtons(String deviceId, List<WorkspaceButton> buttons) async {
-    for (var i = 0; i < buttons.length; i++) {
-      buttons[i].order = i;
-    }
-    _workspace[deviceId] = buttons;
-    await _prefs.setString(
-      _keyWorkspace,
-      jsonEncode(_workspace.map((id, list) => MapEntry(id, list.map((b) => b.toJson()).toList()))),
-    );
   }
 
   /// This device's saved layouts, auto-creating (and persisting) the

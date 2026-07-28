@@ -50,6 +50,9 @@ const (
 	TypeWorkspaceAction  MessageType = "workspace_action"
 	TypeAdaptiveControls MessageType = "adaptive_controls"
 	TypeMinimizedApps    MessageType = "minimized_apps"
+	TypeConfigureApp     MessageType = "configure_app"
+	TypeConfigureButtons MessageType = "configure_buttons"
+	TypeWorkspaceButtons MessageType = "workspace_buttons"
 
 	// Transfer (TCP, encrypted, dedicated connection)
 	TypeTransferOffer  MessageType = "transfer_offer"
@@ -507,8 +510,50 @@ type AdaptiveControl struct {
 	// Icon uses the same curated icon-key vocabulary as WorkspaceButton.icon
 	// (mobile/lib/ui/workspace_tab.dart's kWorkspaceIcons) — a string, not a
 	// platform icon reference, so both clients render it consistently.
-	Icon   string          `json:"icon"`
+	Icon string `json:"icon"`
+	// Color is an ARGB value (matching WorkspaceButton.colorValue's
+	// convention), 0 meaning "no override" — the phone picks a default
+	// accent rather than rendering literal black.
+	Color  int             `json:"color,omitempty"`
 	Action WorkspaceAction `json:"action"`
+}
+
+// ConfigureAppRequest asks the desktop to open its App Actions editor for
+// AppName (the exe reported in the AdaptiveControlsState the phone is
+// currently showing) — sent when the phone's Dynamic Controls card offers
+// "Configure this app" for an application with no defined profile yet.
+type ConfigureAppRequest struct {
+	Type    MessageType `json:"type"`
+	AppName string      `json:"app_name"`
+}
+
+// ConfigureButtonsRequest asks the desktop to open its My Buttons editor for
+// the sending device — no payload beyond Type; the desktop identifies which
+// device to preselect from the message's own sender, the same way every
+// other workspace message is already scoped to whichever peer sent it.
+type ConfigureButtonsRequest struct {
+	Type MessageType `json:"type"`
+}
+
+// WorkspaceButtonDef is one of a paired phone's own custom "My Workspace"
+// action buttons — authored entirely on the desktop (see
+// desktop/plugins/workspace's ButtonStore and the App Actions window's
+// shortcut recorder) and pushed to the phone read-only. The phone never
+// edits these itself; it only taps to run one.
+type WorkspaceButtonDef struct {
+	ID         string          `json:"id"`
+	Label      string          `json:"label"`
+	Icon       string          `json:"icon"`
+	ColorValue int             `json:"color_value"`
+	Action     WorkspaceAction `json:"action"`
+}
+
+// WorkspaceButtonsState is sent to one specific device (never broadcast to
+// all peers, unlike AdaptiveControlsState) whenever that device connects or
+// its own button list changes on the desktop.
+type WorkspaceButtonsState struct {
+	Type    MessageType          `json:"type"`
+	Buttons []WorkspaceButtonDef `json:"buttons"`
 }
 
 // AdaptiveControlsState is broadcast whenever the peer's foreground app
@@ -516,8 +561,14 @@ type AdaptiveControl struct {
 // switch to see the current one). Controls is empty when AppName is empty —
 // no recognized app is currently focused.
 type AdaptiveControlsState struct {
-	Type     MessageType       `json:"type"`
-	AppName  string            `json:"app_name"`
+	Type    MessageType `json:"type"`
+	AppName string      `json:"app_name"`
+	// Exe is the raw, lowercased executable name (e.g. "photoshop.exe") —
+	// distinct from AppName, which is a friendly display name. Echoed back
+	// verbatim in a ConfigureAppRequest so the desktop's App Actions editor
+	// can pre-select the right profile, since a display name cannot be
+	// reliably reversed into an exe name.
+	Exe      string            `json:"exe,omitempty"`
 	Controls []AdaptiveControl `json:"controls"`
 }
 

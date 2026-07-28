@@ -248,11 +248,11 @@ func (s *WeDropService) initCore() error {
 	if err := s.registry.Register(s.filesPlugin, true); err != nil {
 		return fmt.Errorf("register files plugin: %w", err)
 	}
-	s.workspacePlugin = workspace.New()
+	s.workspacePlugin = workspace.New(filepath.Join(dataDir(), "workspace_buttons.json"))
 	if err := s.registry.Register(s.workspacePlugin, true); err != nil {
 		return fmt.Errorf("register workspace plugin: %w", err)
 	}
-	s.adaptivePlugin = adaptivecontrols.New()
+	s.adaptivePlugin = adaptivecontrols.New(filepath.Join(dataDir(), "app_actions.json"))
 	if err := s.registry.Register(s.adaptivePlugin, true); err != nil {
 		return fmt.Errorf("register adaptive-controls plugin: %w", err)
 	}
@@ -580,6 +580,18 @@ func (h pluginHost) Emit(event plugin.Event) {
 		case "progress":
 			h.s.emit("transfer:progress", event.Payload)
 		}
+	}
+	if event.Plugin == adaptivecontrols.ID && event.Name == "configure" {
+		// The phone asked to configure an app with no profile yet — the
+		// frontend listens for this to open the App Actions editor
+		// pre-selected on event.Payload (the app's exe name).
+		h.s.emit("app-actions:open", event.Payload)
+	}
+	if event.Plugin == workspace.ID && event.Name == "configure_buttons" {
+		// The phone asked to configure its own My Workspace buttons — the
+		// frontend listens for this to open the My Buttons editor
+		// pre-selected on event.Payload (the device id).
+		h.s.emit("my-buttons:open", event.Payload)
 	}
 	h.s.pushState()
 }
