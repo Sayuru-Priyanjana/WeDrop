@@ -375,8 +375,15 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   void _onNotificationAction(Map<String, dynamic> event) {
     switch (event['kind'] as String?) {
       case 'clipboard':
-        pushClipboard().catchError((error) {
-          _toastController.add(error.toString());
+        // The native side just brought the app's window to the foreground
+        // (see NotificationActionReceiver.ACTION_SEND_CLIPBOARD) so this can
+        // actually read the clipboard, but that focus change trails this
+        // event by a moment on some Android versions — same settle used by
+        // resyncOnResume for the identical restriction.
+        Future<void>.delayed(const Duration(milliseconds: 300), () {
+          pushClipboard().catchError((error) {
+            _toastController.add(error.toString());
+          });
         });
         break;
       case 'media':

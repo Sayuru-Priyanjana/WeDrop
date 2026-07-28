@@ -35,6 +35,11 @@ class Settings {
 
   bool allowMediaControl;
 
+  /// Multiplier applied to the Remote tab's touchpad deltas before they're
+  /// sent — 1.0 is the original speed, higher moves the remote cursor
+  /// further per physical drag distance.
+  double cursorSpeed;
+
   bool discoverable;
   bool acceptNewPairing;
   bool runInBackground;
@@ -52,6 +57,7 @@ class Settings {
     this.shareNotifications = true,
     this.receiveNotifications = true,
     this.allowMediaControl = true,
+    this.cursorSpeed = 1.0,
     this.discoverable = true,
     this.acceptNewPairing = true,
     this.runInBackground = true,
@@ -76,6 +82,7 @@ class Settings {
         'share_notifications': shareNotifications,
         'receive_notifications': receiveNotifications,
         'allow_media_control': allowMediaControl,
+        'cursor_speed': cursorSpeed,
         'discoverable': discoverable,
         'accept_new_pairing': acceptNewPairing,
         'run_in_background': runInBackground,
@@ -90,6 +97,7 @@ class Settings {
         shareNotifications: json['share_notifications'] as bool? ?? true,
         receiveNotifications: json['receive_notifications'] as bool? ?? true,
         allowMediaControl: json['allow_media_control'] as bool? ?? true,
+        cursorSpeed: (json['cursor_speed'] as num?)?.toDouble() ?? 1.0,
         discoverable: json['discoverable'] as bool? ?? true,
         acceptNewPairing: json['accept_new_pairing'] as bool? ?? true,
         runInBackground: json['run_in_background'] as bool? ?? true,

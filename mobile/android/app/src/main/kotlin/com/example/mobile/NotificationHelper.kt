@@ -90,17 +90,25 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
+        // Fires when the user swipes this away, so WeDropService can stop
+        // re-posting it on routine connect/disconnect status changes — see
+        // that intent's own comment for why this exists.
+        val deletePending = PendingIntent.getService(
+            context, 2,
+            Intent(context, WeDropService::class.java).apply { action = WeDropService.ACTION_DISMISSED },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
         return NotificationCompat.Builder(context, SERVICE_CHANNEL)
             .setContentTitle("WeDrop")
             .setContentText(status)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             // Dismissable, not pinned: the user can swipe this away like any
-            // other notification. It will simply reappear the next time the
-            // connection state actually changes, rather than being stuck
-            // showing whatever it said when it was cleared.
+            // other notification.
             .setOngoing(false)
             .setAutoCancel(false)
             .setContentIntent(pending)
+            .setDeleteIntent(deletePending)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .addAction(

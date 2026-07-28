@@ -27,10 +27,19 @@ class WeDropService : Service() {
     private var multicastLock: WifiManager.MulticastLock? = null
     private var wakeLock: PowerManager.WakeLock? = null
 
+    // Set once the user swipes the notification away (see its setDeleteIntent)
+    // and cleared on the next fresh start, so a routine connect/disconnect
+    // status change does not immediately undo the dismissal by calling
+    // notify() again — notify() on an existing id always resurfaces a
+    // notification regardless of whether the user just cleared it, which is
+    // exactly what made this notification seem impossible to get rid of.
+    private var dismissed = false
+
     companion object {
         private const val ACTION_START = "com.example.mobile.START"
         private const val ACTION_STOP = "com.example.mobile.STOP"
         private const val ACTION_UPDATE = "com.example.mobile.UPDATE"
+        const val ACTION_DISMISSED = "com.example.mobile.DISMISSED"
         private const val EXTRA_STATUS = "status"
 
         fun start(context: Context, status: String) {
@@ -72,7 +81,18 @@ class WeDropService : Service() {
                 stopSelf()
                 return START_NOT_STICKY
             }
+            ACTION_DISMISSED -> {
+                dismissed = true
+                return START_STICKY
+            }
             ACTION_UPDATE -> {
+                // Respect the user having just cleared it — resurfacing it on
+                // the very next routine status change is what made it seem
+                // stuck in the drawer. A fresh app/service start (the `else`
+                // branch below) still resets this, so it comes back the next
+                // time the user actually opens WeDrop.
+                if (dismissed) return START_STICKY
+
                 val status = intent.getStringExtra(EXTRA_STATUS) ?: "Syncing"
                 val notification = NotificationHelper.buildServiceNotification(this, status)
                 val manager = getSystemService(Context.NOTIFICATION_SERVICE)
@@ -81,6 +101,7 @@ class WeDropService : Service() {
                 return START_STICKY
             }
             else -> {
+                dismissed = false
                 val status = intent?.getStringExtra(EXTRA_STATUS) ?: "Keeping your devices in sync"
                 startForegroundCompat(status)
                 acquireLocks()

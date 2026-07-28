@@ -125,6 +125,11 @@ class _DeviceScreenState extends State<DeviceScreen> with SingleTickerProviderSt
           ? _DisconnectedNotice(device: device)
           : TabBarView(
               controller: _tabs,
+              // The Remote/Present tabs are full-surface drag areas (touchpad,
+              // laser pointer) — a horizontal swipe to change slides or move
+              // the cursor was constantly mistaken for a tab-switch gesture.
+              // Only the tab bar itself switches tabs now.
+              physics: const NeverScrollableScrollPhysics(),
               children: [
                 _OverviewTab(service: widget.service, device: device, health: health, media: media),
                 _RemoteTab(service: widget.service, device: device),
@@ -674,9 +679,10 @@ class _RemoteTabState extends State<_RemoteTab> {
   void _queueMove(Offset delta, double devicePixelRatio) {
     // Normalize by device pixel ratio so a drag of the same physical distance
     // moves the remote cursor the same amount regardless of the phone's
-    // screen density.
-    _pendingDx += delta.dx / devicePixelRatio;
-    _pendingDy += delta.dy / devicePixelRatio;
+    // screen density, then apply the user's own cursor-speed preference.
+    final speed = widget.service.settings.cursorSpeed;
+    _pendingDx += delta.dx / devicePixelRatio * speed;
+    _pendingDy += delta.dy / devicePixelRatio * speed;
     _flushTimer ??= Timer.periodic(const Duration(milliseconds: 16), (_) => _flushMove());
   }
 
@@ -699,6 +705,10 @@ class _RemoteTabState extends State<_RemoteTab> {
   Widget build(BuildContext context) {
     return Column(
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: _CursorSpeedControl(service: widget.service),
+        ),
         Expanded(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -863,16 +873,103 @@ class _RemoteTabState extends State<_RemoteTab> {
   }
 }
 
-/// Presentation pointer — big Prev/Next plus start, blank and end.
-class _PresentTab extends StatelessWidget {
+/// A small speed slider for the touchpad's mouse-move sensitivity, persisted
+/// in Settings so it applies across sessions rather than resetting each time
+/// the Remote tab is reopened.
+class _CursorSpeedControl extends StatefulWidget {
+  final AppService service;
+  const _CursorSpeedControl({required this.service});
+
+  @override
+  State<_CursorSpeedControl> createState() => _CursorSpeedControlState();
+}
+
+class _CursorSpeedControlState extends State<_CursorSpeedControl> {
+  double? _dragValue;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = _dragValue ?? widget.service.settings.cursorSpeed;
+
+    return Row(
+      children: [
+        const Icon(Icons.speed_rounded, size: 16, color: WeDropColors.inkFaint),
+        const SizedBox(width: 8),
+        const Text('Cursor speed', style: TextStyle(fontSize: 12, color: WeDropColors.inkFaint)),
+        Expanded(
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 2,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+            ),
+            child: Slider(
+              min: 0.25,
+              max: 3.0,
+              value: value.clamp(0.25, 3.0),
+              onChanged: (v) => setState(() => _dragValue = v),
+              onChangeEnd: (v) {
+                final next = widget.service.settings.copy()..cursorSpeed = v;
+                widget.service.updateSettings(next);
+                setState(() => _dragValue = null);
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Presentation pointer — big Prev/Next plus start, laser toggle and end.
+///
+/// The middle area does one of two things depending on whether the laser
+/// pointer is enabled (toggled via the button that used to just blank the
+/// screen):
+///  - disabled (default): tap anywhere advances to the next slide.
+///  - enabled: dragging moves the remote cursor like a laser pointer, the
+///    same relative mouse-move messages (and cursor-speed setting) the
+///    Remote tab's touchpad uses, rather than tapping to advance.
+class _PresentTab extends StatefulWidget {
   final AppService service;
   final DeviceView device;
   const _PresentTab({required this.service, required this.device});
 
-  void _present(String action) => service.sendRemoteInput(
-        device.deviceId,
-        RemoteInput(action: action),
-      );
+  @override
+  State<_PresentTab> createState() => _PresentTabState();
+}
+
+class _PresentTabState extends State<_PresentTab> {
+  bool _laserEnabled = false;
+  Offset? _last;
+  double _pendingDx = 0;
+  double _pendingDy = 0;
+  Timer? _flushTimer;
+
+  void _present(String action) =>
+      widget.service.sendRemoteInput(widget.device.deviceId, RemoteInput(action: action));
+
+  void _queueMove(Offset delta, double devicePixelRatio) {
+    final speed = widget.service.settings.cursorSpeed;
+    _pendingDx += delta.dx / devicePixelRatio * speed;
+    _pendingDy += delta.dy / devicePixelRatio * speed;
+    _flushTimer ??= Timer.periodic(const Duration(milliseconds: 16), (_) => _flushMove());
+  }
+
+  void _flushMove() {
+    if (_pendingDx == 0 && _pendingDy == 0) return;
+    widget.service.sendRemoteInput(
+      widget.device.deviceId,
+      RemoteInput(action: InputAction.mouseMove, dx: _pendingDx, dy: _pendingDy),
+    );
+    _pendingDx = 0;
+    _pendingDy = 0;
+  }
+
+  @override
+  void dispose() {
+    _flushTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -892,21 +989,49 @@ class _PresentTab extends StatelessWidget {
             child: Material(
               color: WeDropColors.brand.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(18),
-              child: InkWell(
-                onTap: () => _present(InputAction.presentNext),
-                borderRadius: BorderRadius.circular(18),
-                child: const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.ads_click_rounded, size: 40, color: WeDropColors.brandSoft),
-                      SizedBox(height: 12),
-                      Text('Tap anywhere for next slide',
-                          style: TextStyle(color: WeDropColors.brandSoft, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                ),
-              ),
+              child: _laserEnabled
+                  ? GestureDetector(
+                      onPanStart: (d) => _last = d.localPosition,
+                      onPanUpdate: (d) {
+                        final last = _last;
+                        if (last == null) return;
+                        final delta = d.localPosition - last;
+                        _last = d.localPosition;
+                        _queueMove(delta, MediaQuery.of(context).devicePixelRatio);
+                      },
+                      onPanEnd: (_) {
+                        _last = null;
+                        _flushMove();
+                      },
+                      child: const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.point_of_sale_rounded, size: 40, color: WeDropColors.brandSoft),
+                            SizedBox(height: 12),
+                            Text('Drag to move the laser pointer',
+                                style:
+                                    TextStyle(color: WeDropColors.brandSoft, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    )
+                  : InkWell(
+                      onTap: () => _present(InputAction.presentNext),
+                      borderRadius: BorderRadius.circular(18),
+                      child: const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.ads_click_rounded, size: 40, color: WeDropColors.brandSoft),
+                            SizedBox(height: 12),
+                            Text('Tap anywhere for next slide',
+                                style:
+                                    TextStyle(color: WeDropColors.brandSoft, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ),
+                    ),
             ),
           ),
           const SizedBox(height: 12),
@@ -914,7 +1039,9 @@ class _PresentTab extends StatelessWidget {
             children: [
               Expanded(child: _smallBtn('Start', Icons.play_arrow_rounded, InputAction.presentStart)),
               const SizedBox(width: 10),
-              Expanded(child: _smallBtn('Blank', Icons.stop_circle_outlined, InputAction.presentBlank)),
+              Expanded(
+                child: _laserToggleBtn(),
+              ),
               const SizedBox(width: 10),
               Expanded(child: _smallBtn('End', Icons.close_rounded, InputAction.presentEnd)),
             ],
@@ -940,6 +1067,33 @@ class _PresentTab extends StatelessWidget {
               Icon(icon, color: WeDropColors.brandSoft),
               const SizedBox(height: 4),
               Text(label, style: const TextStyle(fontSize: 12, color: WeDropColors.inkDim)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _laserToggleBtn() {
+    final active = _laserEnabled;
+    return Material(
+      color: active ? WeDropColors.brand.withValues(alpha: 0.2) : WeDropColors.surfaceHi,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: () => setState(() => _laserEnabled = !_laserEnabled),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          height: 48,
+          alignment: Alignment.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.point_of_sale_rounded,
+                  size: 18, color: active ? WeDropColors.brandSoft : WeDropColors.inkDim),
+              const SizedBox(height: 2),
+              Text(active ? 'Laser on' : 'Laser',
+                  style: TextStyle(
+                      fontSize: 11, color: active ? WeDropColors.brandSoft : WeDropColors.inkFaint)),
             ],
           ),
         ),

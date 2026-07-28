@@ -36,6 +36,18 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 )
             }
             ACTION_SEND_CLIPBOARD -> {
+                // Reading the clipboard requires this app to actually hold
+                // window focus (Android only grants clipboard reads to the
+                // focused app or the default IME, since API 29) — a
+                // BroadcastReceiver firing on its own never brings the app's
+                // window forward, so without this the read on the Dart side
+                // silently comes back empty. Bring the launcher activity to
+                // the foreground first, the same way tapping the
+                // notification's body already does via its content intent.
+                context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                    context.startActivity(this)
+                }
                 MainActivity.emit(mapOf("type" to "notification_action", "kind" to "clipboard"))
             }
         }

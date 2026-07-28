@@ -42,27 +42,46 @@ const (
 	wheelDelta = 120
 )
 
-// mouseInput mirrors the C MOUSEINPUT; the trailing padding makes the Go struct
-// the same size as the union member SendInput expects on amd64.
+// mouseInput/keyboardInput mirror the real Win32 INPUT struct's layout on
+// amd64 — not just its size. INPUT is `DWORD type` followed by a union of
+// MOUSEINPUT/KEYBDINPUT/HARDWAREINPUT; because that union's largest member
+// (MOUSEINPUT) contains a ULONG_PTR needing 8-byte alignment, the union
+// itself — and so every field after `type` — starts 8 bytes into the
+// struct, not 4. The previous version of these structs only padded the
+// *end* to reach the right total size (matching a comment claiming that was
+// sufficient), which is wrong: every field from dx/wVk onward was actually
+// sitting 4 bytes earlier than SendInput expects, so it was reading
+// shifted/garbage flags and deltas. Confirmed by direct testing: the
+// original layout never moved the OS cursor at all (SendInput either read a
+// dwFlags value that didn't include MOUSEEVENTF_MOVE, or the keyboard
+// variant's resulting wrong total size — 32 bytes instead of the required
+// 40 — made SendInput reject the call outright). This is the same
+// leading-padding fix any C compiler applies automatically, made explicit
+// since Go does not know about C's union-alignment rules.
 type mouseInput struct {
 	typ       uint32
+	_pad      uint32
 	dx        int32
 	dy        int32
 	mouseData uint32
 	dwFlags   uint32
 	time      uint32
 	dwExtra   uintptr
-	_         [8]byte
 }
 
 type keyboardInput struct {
 	typ     uint32
+	_pad    uint32
 	wVk     uint16
 	wScan   uint16
 	dwFlags uint32
 	time    uint32
 	dwExtra uintptr
-	_       [8]byte
+	// KEYBDINPUT is smaller than MOUSEINPUT, but the union's total size in a
+	// real INPUT struct is always the largest member's size (40 bytes
+	// overall) — SendInput requires cbSize to equal that exactly regardless
+	// of which variant is populated, so this pads out to match.
+	_ [8]byte
 }
 
 func sendMouse(flags uint32, dx, dy int32, data uint32) {
