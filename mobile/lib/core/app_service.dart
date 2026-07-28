@@ -19,6 +19,7 @@ import '../plugins/clipboard/clipboard_plugin.dart';
 import '../plugins/files/files_plugin.dart';
 import '../plugins/health/health_plugin.dart';
 import '../plugins/media/media_plugin.dart';
+import '../plugins/minimizedapps/minimizedapps_plugin.dart';
 import '../plugins/notifications/notifications_plugin.dart';
 
 /// A device as the UI sees it: trust store, discovery and session state merged.
@@ -81,6 +82,7 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   late MediaPlugin _mediaPlugin;
   late FilesPlugin _filesPlugin;
   late AdaptiveControlsPlugin _adaptiveControlsPlugin;
+  late MinimizedAppsPlugin _minimizedAppsPlugin;
 
   /// True once the network stack is fully constructed. Guards the late fields
   /// above so a startup that fails partway — or a test host with no platform
@@ -262,6 +264,8 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
       _plugins.register(_filesPlugin);
       _adaptiveControlsPlugin = AdaptiveControlsPlugin();
       _plugins.register(_adaptiveControlsPlugin);
+      _minimizedAppsPlugin = MinimizedAppsPlugin();
+      _plugins.register(_minimizedAppsPlugin);
 
       final port = await _manager.start();
       // The network stack is now safe to touch and tear down.
@@ -439,6 +443,10 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   AdaptiveControlsState? adaptiveControlsOf(String deviceId) =>
       _adaptiveControlsPlugin.stateOf(deviceId);
 
+  /// A peer's currently-minimized windows, or null if nothing has been
+  /// reported yet.
+  MinimizedAppsState? minimizedAppsOf(String deviceId) => _minimizedAppsPlugin.stateOf(deviceId);
+
   /// The latest media state reported by a peer, or null if none yet.
   MediaState? mediaOf(String deviceId) => _mediaPlugin.mediaOf(deviceId);
 
@@ -470,11 +478,34 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     }
   }
 
+  /// Brings a window reported by minimizedAppsOf back to the front — same
+  /// failure handling as sendWorkspaceAction, since this is also a
+  /// deliberate, named action the user just tapped.
+  Future<void> restoreWindow(String deviceId, int windowId) =>
+      sendWorkspaceAction(deviceId, WorkspaceAction(action: WorkspaceActionType.restoreWindow, windowId: windowId));
+
   /// This device's own "My Workspace" buttons, in display order.
   List<WorkspaceButton> workspaceButtonsFor(String deviceId) => _store.workspaceButtons(deviceId);
 
   Future<void> saveWorkspaceButtons(String deviceId, List<WorkspaceButton> buttons) async {
     await _store.saveWorkspaceButtons(deviceId, buttons);
+    notifyListeners();
+  }
+
+  /// This device's saved Workspace-tab layouts (auto-creating "Default" on
+  /// first access).
+  List<WorkspaceLayout> workspaceLayoutsFor(String deviceId) => _store.layoutsFor(deviceId);
+
+  /// The layout currently shown for this device.
+  WorkspaceLayout activeWorkspaceLayoutFor(String deviceId) => _store.activeLayoutFor(deviceId);
+
+  Future<void> saveWorkspaceLayouts(String deviceId, List<WorkspaceLayout> layouts) async {
+    await _store.saveLayouts(deviceId, layouts);
+    notifyListeners();
+  }
+
+  Future<void> setActiveWorkspaceLayout(String deviceId, String layoutId) async {
+    await _store.setActiveLayout(deviceId, layoutId);
     notifyListeners();
   }
 

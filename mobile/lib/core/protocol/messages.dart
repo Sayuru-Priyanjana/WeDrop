@@ -36,6 +36,7 @@ class MsgType {
   static const remoteInput = 'remote_input';
   static const workspaceAction = 'workspace_action';
   static const adaptiveControls = 'adaptive_controls';
+  static const minimizedApps = 'minimized_apps';
 
   static const transferOffer = 'transfer_offer';
   static const transferAccept = 'transfer_accept';
@@ -78,6 +79,9 @@ class Capability {
   // exact same AllowWorkspace permission as any other workspace action;
   // this only gates whether the schema itself is even sent.
   static const adaptiveControls = 'adaptive_controls';
+  // Same reasoning as adaptiveControls above (plugin id uniqueness); the
+  // real authorization is still AllowWorkspace.
+  static const minimizedApps = 'minimized_apps';
   // No toggle; always advertised.
   static const health = 'device-health';
 }
@@ -540,6 +544,10 @@ class WorkspaceActionType {
   static const openFolder = 'open_folder';
   static const openUrl = 'open_url';
   static const shellCommand = 'shell_command';
+  // Brings a window reported by MinimizedAppsState to the front; not exposed
+  // in the user-facing shortcut-button editor, only sent by the minimized-
+  // apps widget itself.
+  static const restoreWindow = 'restore_window';
 }
 
 /// Modifier names carried in [WorkspaceAction.modifiers].
@@ -547,6 +555,10 @@ class Modifier {
   static const ctrl = 'ctrl';
   static const shift = 'shift';
   static const alt = 'alt';
+  // The Windows/Command/Super key — used by the desktop-switcher widget's
+  // Ctrl+Win+Left/Right (Windows' own native virtual-desktop shortcut), not
+  // exposed in the user-facing shortcut-button editor.
+  static const meta = 'meta';
 }
 
 /// Runs one of a user's own custom "My Workspace" buttons on the peer — a
@@ -562,6 +574,8 @@ class WorkspaceAction {
   final String path;
   final String url;
   final String command;
+  // restoreWindow: id (native window handle) from a MinimizedAppsState entry.
+  final int windowId;
 
   const WorkspaceAction({
     required this.action,
@@ -570,6 +584,7 @@ class WorkspaceAction {
     this.path = '',
     this.url = '',
     this.command = '',
+    this.windowId = 0,
   });
 
   Map<String, dynamic> toJson() => {
@@ -580,6 +595,7 @@ class WorkspaceAction {
         if (path.isNotEmpty) 'path': path,
         if (url.isNotEmpty) 'url': url,
         if (command.isNotEmpty) 'command': command,
+        if (windowId != 0) 'window_id': windowId,
       };
 
   /// Needed for the first time by AdaptiveControl — every earlier use of
@@ -591,6 +607,7 @@ class WorkspaceAction {
         path: json['path'] as String? ?? '',
         url: json['url'] as String? ?? '',
         command: json['command'] as String? ?? '',
+        windowId: (json['window_id'] as num?)?.toInt() ?? 0,
       );
 }
 
@@ -634,6 +651,39 @@ class AdaptiveControlsState {
         appName: json['app_name'] as String? ?? '',
         controls: ((json['controls'] as List?) ?? const [])
             .map((e) => AdaptiveControl.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
+/// One currently-minimized top-level window on the peer. [id] is the native
+/// window handle, opaque to the phone — it only ever gets echoed back in a
+/// WorkspaceAction.windowId to restore that exact window.
+class MinimizedWindow {
+  final int id;
+  final String title;
+  final String appName;
+
+  const MinimizedWindow({required this.id, required this.title, required this.appName});
+
+  factory MinimizedWindow.fromJson(Map<String, dynamic> json) => MinimizedWindow(
+        id: (json['id'] as num?)?.toInt() ?? 0,
+        title: json['title'] as String? ?? '',
+        appName: json['app_name'] as String? ?? '',
+      );
+}
+
+/// The peer's currently-minimized windows, broadcast whenever the set
+/// changes (and once when a peer connects). Deliberately scoped to
+/// "currently minimized" rather than "every open window on the selected
+/// virtual desktop" — see MinimizedAppsState in messages.go for why.
+class MinimizedAppsState {
+  final List<MinimizedWindow> windows;
+
+  const MinimizedAppsState({this.windows = const []});
+
+  factory MinimizedAppsState.fromJson(Map<String, dynamic> json) => MinimizedAppsState(
+        windows: ((json['windows'] as List?) ?? const [])
+            .map((e) => MinimizedWindow.fromJson(e as Map<String, dynamic>))
             .toList(),
       );
 }

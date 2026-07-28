@@ -100,6 +100,7 @@ func (s *Settings) Capabilities() []string {
 	}
 	caps = append(caps, protocol.CapWorkspace)        // per-device AllowWorkspace gates this further; see TrustedDevice.Allows
 	caps = append(caps, protocol.CapAdaptiveControls) // always receivable; running a control still goes through AllowWorkspace
+	caps = append(caps, protocol.CapMinimizedApps)    // always receivable; restoring a window still goes through AllowWorkspace
 	caps = append(caps, protocol.CapHealth)           // no toggle; always receivable
 	return caps
 }

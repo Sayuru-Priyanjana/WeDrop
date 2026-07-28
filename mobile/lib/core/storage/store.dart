@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -20,6 +21,8 @@ const _keyName = 'wedrop.device_name';
 const _keySettings = 'wedrop.settings';
 const _keyTrusted = 'wedrop.trusted_devices';
 const _keyWorkspace = 'wedrop.workspace_buttons';
+const _keyLayouts = 'wedrop.workspace_layouts';
+const _keyActiveLayout = 'wedrop.active_layout';
 
 /// Every user-facing toggle. Each feature has separate send and receive
 /// switches, because "share my clipboard" and "let others change my clipboard"
@@ -265,6 +268,110 @@ class WorkspaceButton {
       );
 }
 
+/// The built-in Workspace-tab widget types. A "widget" here is one card in
+/// the tab's layout — the same content that used to be permanently stacked
+/// (desktop switcher, dynamic controls, My-buttons grid) plus the new
+/// minimized-apps card, now addable/removable/resizable per named layout.
+class WidgetType {
+  static const desktopSwitcher = 'desktop_switcher';
+  static const adaptiveControls = 'adaptive_controls';
+  static const minimizedApps = 'minimized_apps';
+  static const buttons = 'buttons';
+
+  /// Display name and icon key (into ui/workspace_tab.dart's kWorkspaceIcons)
+  /// for the "add widget" store — kept next to the type constants so a new
+  /// widget type only needs updating in one place plus its renderer.
+  static const Map<String, String> labels = {
+    desktopSwitcher: 'Switch desktop',
+    adaptiveControls: 'Dynamic controls',
+    minimizedApps: 'Minimized apps',
+    buttons: 'My buttons',
+  };
+  static const Map<String, String> icons = {
+    desktopSwitcher: 'monitor',
+    adaptiveControls: 'bolt',
+    minimizedApps: 'apps',
+    buttons: 'grid',
+  };
+
+  static const all = [desktopSwitcher, adaptiveControls, minimizedApps, buttons];
+}
+
+/// How much horizontal space a widget takes in its layout — full width, or
+/// compact (paired two-per-row with another compact widget).
+class WidgetSize {
+  static const full = 'full';
+  static const compact = 'compact';
+}
+
+/// One widget placed in a WorkspaceLayout.
+class WidgetInstance {
+  final String id;
+  String type; // WidgetType.*
+  String size; // WidgetSize.*
+  int order;
+
+  WidgetInstance({
+    required this.id,
+    required this.type,
+    this.size = WidgetSize.full,
+    this.order = 0,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'type': type,
+        'size': size,
+        'order': order,
+      };
+
+  factory WidgetInstance.fromJson(Map<String, dynamic> json) => WidgetInstance(
+        id: json['id'] as String? ?? '',
+        type: json['type'] as String? ?? '',
+        size: json['size'] as String? ?? WidgetSize.full,
+        order: json['order'] as int? ?? 0,
+      );
+}
+
+/// A named, user-customizable arrangement of widgets for one paired device
+/// (e.g. "Programming", "Video editing", "Music") — scoped per device for the
+/// same reason WorkspaceButton is: a layout built around VS Code shortcuts
+/// only means something on the specific machine it targets.
+class WorkspaceLayout {
+  final String id;
+  String name;
+  List<WidgetInstance> widgets;
+
+  WorkspaceLayout({required this.id, required this.name, required this.widgets});
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'widgets': widgets.map((w) => w.toJson()).toList(),
+      };
+
+  factory WorkspaceLayout.fromJson(Map<String, dynamic> json) => WorkspaceLayout(
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? 'Layout',
+        widgets: ((json['widgets'] as List?) ?? const [])
+            .map((e) => WidgetInstance.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
+/// The layout every device starts with — the same four cards the Workspace
+/// tab used to show permanently, now just the first user-editable preset.
+WorkspaceLayout _defaultLayout() => WorkspaceLayout(
+      id: 'default',
+      name: 'Default',
+      widgets: [
+        WidgetInstance(id: 'default_switcher', type: WidgetType.desktopSwitcher, order: 0),
+        WidgetInstance(id: 'default_minimized', type: WidgetType.minimizedApps, order: 1),
+        WidgetInstance(id: 'default_adaptive', type: WidgetType.adaptiveControls, order: 2),
+        WidgetInstance(id: 'default_buttons', type: WidgetType.buttons, order: 3),
+      ],
+    );
+
 /// Loads and saves everything that must survive a restart.
 class WeDropStore {
   final SharedPreferences _prefs;
@@ -274,6 +381,8 @@ class WeDropStore {
   late String deviceName;
   final Map<String, TrustedDevice> _trusted = {};
   final Map<String, List<WorkspaceButton>> _workspace = {};
+  final Map<String, List<WorkspaceLayout>> _layouts = {};
+  final Map<String, String> _activeLayout = {};
 
   WeDropStore._(this._prefs);
 
@@ -339,6 +448,29 @@ class WeDropStore {
           _workspace[deviceId] = (buttons as List)
               .map((e) => WorkspaceButton.fromJson(e as Map<String, dynamic>))
               .toList();
+        });
+      } catch (_) {
+        // A corrupt map must not stop the app from starting.
+      }
+    }
+
+    final layoutsRaw = _prefs.getString(_keyLayouts);
+    if (layoutsRaw != null) {
+      try {
+        (jsonDecode(layoutsRaw) as Map<String, dynamic>).forEach((deviceId, layouts) {
+          _layouts[deviceId] =
+              (layouts as List).map((e) => WorkspaceLayout.fromJson(e as Map<String, dynamic>)).toList();
+        });
+      } catch (_) {
+        // A corrupt map must not stop the app from starting.
+      }
+    }
+
+    final activeRaw = _prefs.getString(_keyActiveLayout);
+    if (activeRaw != null) {
+      try {
+        (jsonDecode(activeRaw) as Map<String, dynamic>).forEach((deviceId, layoutId) {
+          _activeLayout[deviceId] = layoutId as String;
         });
       } catch (_) {
         // A corrupt map must not stop the app from starting.
@@ -436,6 +568,45 @@ class WeDropStore {
     await _prefs.setString(
       _keyWorkspace,
       jsonEncode(_workspace.map((id, list) => MapEntry(id, list.map((b) => b.toJson()).toList()))),
+    );
+  }
+
+  /// This device's saved layouts, auto-creating (and persisting) the
+  /// built-in "Default" one on first access so a device is never left with
+  /// zero layouts to show.
+  List<WorkspaceLayout> layoutsFor(String deviceId) {
+    var list = _layouts[deviceId];
+    if (list == null || list.isEmpty) {
+      list = [_defaultLayout()];
+      _layouts[deviceId] = list;
+      unawaited(_saveLayouts());
+    }
+    return list;
+  }
+
+  /// The layout currently selected for this device — falls back to the
+  /// first layout if none was explicitly chosen yet, or the active choice
+  /// was deleted out from under it.
+  WorkspaceLayout activeLayoutFor(String deviceId) {
+    final layouts = layoutsFor(deviceId);
+    final activeId = _activeLayout[deviceId];
+    return layouts.firstWhere((l) => l.id == activeId, orElse: () => layouts.first);
+  }
+
+  Future<void> saveLayouts(String deviceId, List<WorkspaceLayout> layouts) async {
+    _layouts[deviceId] = layouts;
+    await _saveLayouts();
+  }
+
+  Future<void> setActiveLayout(String deviceId, String layoutId) async {
+    _activeLayout[deviceId] = layoutId;
+    await _prefs.setString(_keyActiveLayout, jsonEncode(_activeLayout));
+  }
+
+  Future<void> _saveLayouts() async {
+    await _prefs.setString(
+      _keyLayouts,
+      jsonEncode(_layouts.map((id, list) => MapEntry(id, list.map((l) => l.toJson()).toList()))),
     );
   }
 }

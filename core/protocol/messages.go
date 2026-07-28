@@ -49,6 +49,7 @@ const (
 	TypeRemoteInput      MessageType = "remote_input"
 	TypeWorkspaceAction  MessageType = "workspace_action"
 	TypeAdaptiveControls MessageType = "adaptive_controls"
+	TypeMinimizedApps    MessageType = "minimized_apps"
 
 	// Transfer (TCP, encrypted, dedicated connection)
 	TypeTransferOffer  MessageType = "transfer_offer"
@@ -196,6 +197,10 @@ const (
 	// AllowWorkspace permission as any other workspace action; this
 	// capability only gates whether the schema itself is even sent.
 	CapAdaptiveControls = "adaptive_controls"
+	// CapMinimizedApps is its own capability for the same reason as
+	// CapAdaptiveControls above (plugin ID uniqueness) — the real
+	// authorization is still AllowWorkspace.
+	CapMinimizedApps = "minimized_apps"
 	// CapHealth is always advertised — there is no user-facing toggle for
 	// device-health reporting, unlike the other capabilities.
 	CapHealth = "device-health"
@@ -465,15 +470,19 @@ type WorkspaceAction struct {
 	// peer's own AllowAutomation permission — a workspace button existing
 	// does not by itself mean shell commands are allowed.
 	Command string `json:"command,omitempty"`
+	// RestoreWindow: the id (native window handle) of a window reported by
+	// MinimizedAppsState to bring to the front.
+	WindowID int64 `json:"window_id,omitempty"`
 }
 
 // Workspace button actions.
 const (
-	WorkspaceShortcut     = "shortcut"
-	WorkspaceOpenApp      = "open_app"
-	WorkspaceOpenFolder   = "open_folder"
-	WorkspaceOpenURL      = "open_url"
-	WorkspaceShellCommand = "shell_command"
+	WorkspaceShortcut      = "shortcut"
+	WorkspaceOpenApp       = "open_app"
+	WorkspaceOpenFolder    = "open_folder"
+	WorkspaceOpenURL       = "open_url"
+	WorkspaceShellCommand  = "shell_command"
+	WorkspaceRestoreWindow = "restore_window"
 )
 
 // Modifier names carried in WorkspaceAction.Modifiers.
@@ -481,6 +490,10 @@ const (
 	ModifierCtrl  = "ctrl"
 	ModifierShift = "shift"
 	ModifierAlt   = "alt"
+	// ModifierMeta is the Windows/Command/Super key — added for the desktop
+	// switcher widget (Ctrl+Win+Left/Right is Windows' own native virtual
+	// desktop shortcut), not previously needed by any shortcut button.
+	ModifierMeta = "meta"
 )
 
 // AdaptiveControl is one dynamic, app-provided control the peer's currently
@@ -506,6 +519,27 @@ type AdaptiveControlsState struct {
 	Type     MessageType       `json:"type"`
 	AppName  string            `json:"app_name"`
 	Controls []AdaptiveControl `json:"controls"`
+}
+
+// MinimizedWindow is one currently-minimized top-level window on the peer.
+// ID is the native window handle (an HWND on Windows), opaque to the
+// receiver — it only ever gets echoed back verbatim in a WorkspaceAction's
+// WindowID to restore that exact window, never interpreted on the phone.
+type MinimizedWindow struct {
+	ID      int64  `json:"id"`
+	Title   string `json:"title"`
+	AppName string `json:"app_name"`
+}
+
+// MinimizedAppsState is broadcast whenever the peer's set of minimized
+// windows changes (and once when a peer connects). Deliberately scoped to
+// "currently minimized", not "every open window on the currently selected
+// virtual desktop" — the latter needs the same undocumented, version-fragile
+// virtual-desktop COM interfaces the desktop-switcher widget avoids by using
+// Windows' own native Ctrl+Win+Left/Right shortcut instead.
+type MinimizedAppsState struct {
+	Type    MessageType       `json:"type"`
+	Windows []MinimizedWindow `json:"windows"`
 }
 
 // TransferOffer announces an incoming file on a dedicated transfer connection.

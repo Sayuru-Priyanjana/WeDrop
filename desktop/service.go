@@ -31,6 +31,7 @@ import (
 	"desktop/plugins/files"
 	"desktop/plugins/health"
 	"desktop/plugins/media"
+	"desktop/plugins/minimizedapps"
 	"desktop/plugins/notifications"
 	"desktop/plugins/remoteinput"
 	"desktop/plugins/workspace"
@@ -79,6 +80,7 @@ type WeDropService struct {
 	filesPlugin     *files.Plugin
 	workspacePlugin *workspace.Plugin
 	adaptivePlugin  *adaptivecontrols.Plugin
+	minimizedPlugin *minimizedapps.Plugin
 
 	stopChan chan struct{}
 	stopOnce sync.Once
@@ -253,6 +255,10 @@ func (s *WeDropService) initCore() error {
 	s.adaptivePlugin = adaptivecontrols.New()
 	if err := s.registry.Register(s.adaptivePlugin, true); err != nil {
 		return fmt.Errorf("register adaptive-controls plugin: %w", err)
+	}
+	s.minimizedPlugin = minimizedapps.New()
+	if err := s.registry.Register(s.minimizedPlugin, true); err != nil {
+		return fmt.Errorf("register minimized-apps plugin: %w", err)
 	}
 	s.manager.OnTransferOffer = func(conn *transport.SecureConn, peer protocol.DeviceInfo, offer protocol.TransferOffer) {
 		s.registry.HandleTransferOffer(conn, peer, offer)

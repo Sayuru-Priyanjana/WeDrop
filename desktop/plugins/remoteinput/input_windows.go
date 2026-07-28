@@ -252,6 +252,7 @@ const (
 	vkControl = 0x11
 	vkShift   = 0x10
 	vkMenu    = 0x12 // Alt
+	vkLWin    = 0x5B // Windows/Meta key
 )
 
 func modifierVK(name string) (uint16, bool) {
@@ -262,6 +263,8 @@ func modifierVK(name string) (uint16, bool) {
 		return vkShift, true
 	case protocol.ModifierAlt:
 		return vkMenu, true
+	case protocol.ModifierMeta:
+		return vkLWin, true
 	}
 	return 0, false
 }
