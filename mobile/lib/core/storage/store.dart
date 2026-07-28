@@ -19,6 +19,7 @@ const _keyPublic = 'wedrop.identity_public';
 const _keyName = 'wedrop.device_name';
 const _keySettings = 'wedrop.settings';
 const _keyTrusted = 'wedrop.trusted_devices';
+const _keyWorkspace = 'wedrop.workspace_buttons';
 
 /// Every user-facing toggle. Each feature has separate send and receive
 /// switches, because "share my clipboard" and "let others change my clipboard"
@@ -40,6 +41,12 @@ class Settings {
   /// further per physical drag distance.
   double cursorSpeed;
 
+  /// Off by default, unlike every other feature here: lets a paired device's
+  /// "My Workspace" buttons run shell/script commands, not just
+  /// shortcuts/open actions. Checked in addition to a device's own
+  /// allowWorkspace, not instead of it.
+  bool allowAutomation;
+
   bool discoverable;
   bool acceptNewPairing;
   bool runInBackground;
@@ -58,6 +65,7 @@ class Settings {
     this.receiveNotifications = true,
     this.allowMediaControl = true,
     this.cursorSpeed = 1.0,
+    this.allowAutomation = false,
     this.discoverable = true,
     this.acceptNewPairing = true,
     this.runInBackground = true,
@@ -71,6 +79,7 @@ class Settings {
         Capability.files,
         if (receiveNotifications) Capability.notifications,
         if (allowMediaControl) Capability.media,
+        Capability.workspace,
         Capability.health,
       ];
 
@@ -83,6 +92,7 @@ class Settings {
         'receive_notifications': receiveNotifications,
         'allow_media_control': allowMediaControl,
         'cursor_speed': cursorSpeed,
+        'allow_automation': allowAutomation,
         'discoverable': discoverable,
         'accept_new_pairing': acceptNewPairing,
         'run_in_background': runInBackground,
@@ -98,6 +108,7 @@ class Settings {
         receiveNotifications: json['receive_notifications'] as bool? ?? true,
         allowMediaControl: json['allow_media_control'] as bool? ?? true,
         cursorSpeed: (json['cursor_speed'] as num?)?.toDouble() ?? 1.0,
+        allowAutomation: json['allow_automation'] as bool? ?? false,
         discoverable: json['discoverable'] as bool? ?? true,
         acceptNewPairing: json['accept_new_pairing'] as bool? ?? true,
         runInBackground: json['run_in_background'] as bool? ?? true,
@@ -122,6 +133,11 @@ class TrustedDevice {
   bool allowFiles;
   bool allowNotifications;
   bool allowMedia;
+  // Whether this device may send workspace actions at all. The actually-risky
+  // action (running a shell command) has its own separate, off-by-default
+  // gate — Settings.allowAutomation, a global switch checked in addition to
+  // this one, not instead of it.
+  bool allowWorkspace;
 
   TrustedDevice({
     required this.deviceId,
@@ -135,6 +151,7 @@ class TrustedDevice {
     this.allowFiles = true,
     this.allowNotifications = true,
     this.allowMedia = true,
+    this.allowWorkspace = true,
   }) : pairedAt = pairedAt ?? DateTime.now().millisecondsSinceEpoch;
 
   bool allows(String capability) {
@@ -147,6 +164,8 @@ class TrustedDevice {
         return allowNotifications;
       case Capability.media:
         return allowMedia;
+      case Capability.workspace:
+        return allowWorkspace;
     }
     return false;
   }
@@ -165,6 +184,9 @@ class TrustedDevice {
       case Capability.media:
         allowMedia = allowed;
         break;
+      case Capability.workspace:
+        allowWorkspace = allowed;
+        break;
     }
   }
 
@@ -180,6 +202,7 @@ class TrustedDevice {
         'allow_files': allowFiles,
         'allow_notifications': allowNotifications,
         'allow_media': allowMedia,
+        'allow_workspace': allowWorkspace,
       };
 
   factory TrustedDevice.fromJson(Map<String, dynamic> json) => TrustedDevice(
@@ -194,6 +217,50 @@ class TrustedDevice {
         allowFiles: json['allow_files'] as bool? ?? true,
         allowNotifications: json['allow_notifications'] as bool? ?? true,
         allowMedia: json['allow_media'] as bool? ?? true,
+        allowWorkspace: json['allow_workspace'] as bool? ?? true,
+      );
+}
+
+/// One user-defined "My Workspace" button — scoped to a single paired
+/// desktop (a button like "open VS Code" only means something on the
+/// specific machine it targets), not a global cross-device profile.
+class WorkspaceButton {
+  final String id;
+  String label;
+  String icon;
+  int colorValue;
+  String actionType; // WorkspaceActionType.*
+  Map<String, dynamic> actionParams;
+  int order;
+
+  WorkspaceButton({
+    required this.id,
+    required this.label,
+    required this.icon,
+    required this.colorValue,
+    required this.actionType,
+    this.actionParams = const {},
+    this.order = 0,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'label': label,
+        'icon': icon,
+        'color_value': colorValue,
+        'action_type': actionType,
+        'action_params': actionParams,
+        'order': order,
+      };
+
+  factory WorkspaceButton.fromJson(Map<String, dynamic> json) => WorkspaceButton(
+        id: json['id'] as String? ?? '',
+        label: json['label'] as String? ?? '',
+        icon: json['icon'] as String? ?? '',
+        colorValue: json['color_value'] as int? ?? 0xFF4F7CFF,
+        actionType: json['action_type'] as String? ?? '',
+        actionParams: (json['action_params'] as Map?)?.cast<String, dynamic>() ?? const {},
+        order: json['order'] as int? ?? 0,
       );
 }
 
@@ -205,6 +272,7 @@ class WeDropStore {
   late Settings settings;
   late String deviceName;
   final Map<String, TrustedDevice> _trusted = {};
+  final Map<String, List<WorkspaceButton>> _workspace = {};
 
   WeDropStore._(this._prefs);
 
@@ -262,6 +330,19 @@ class WeDropStore {
         // pair again. Refusing to launch would be far worse.
       }
     }
+
+    final workspaceRaw = _prefs.getString(_keyWorkspace);
+    if (workspaceRaw != null) {
+      try {
+        (jsonDecode(workspaceRaw) as Map<String, dynamic>).forEach((deviceId, buttons) {
+          _workspace[deviceId] = (buttons as List)
+              .map((e) => WorkspaceButton.fromJson(e as Map<String, dynamic>))
+              .toList();
+        });
+      } catch (_) {
+        // A corrupt map must not stop the app from starting.
+      }
+    }
   }
 
   String get deviceId => identity.deviceId;
@@ -289,7 +370,8 @@ class WeDropStore {
         ..allowClipboard = existing.allowClipboard
         ..allowFiles = existing.allowFiles
         ..allowNotifications = existing.allowNotifications
-        ..allowMedia = existing.allowMedia;
+        ..allowMedia = existing.allowMedia
+        ..allowWorkspace = existing.allowWorkspace;
     }
     _trusted[device.deviceId] = device;
     await _saveTrusted();
@@ -336,5 +418,23 @@ class WeDropStore {
   Future<void> _saveTrusted() async {
     final list = _trusted.values.map((d) => d.toJson()).toList();
     await _prefs.setString(_keyTrusted, jsonEncode(list));
+  }
+
+  /// This device's own "My Workspace" buttons, in display order.
+  List<WorkspaceButton> workspaceButtons(String deviceId) {
+    final list = List.of(_workspace[deviceId] ?? const <WorkspaceButton>[]);
+    list.sort((a, b) => a.order.compareTo(b.order));
+    return list;
+  }
+
+  Future<void> saveWorkspaceButtons(String deviceId, List<WorkspaceButton> buttons) async {
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].order = i;
+    }
+    _workspace[deviceId] = buttons;
+    await _prefs.setString(
+      _keyWorkspace,
+      jsonEncode(_workspace.map((id, list) => MapEntry(id, list.map((b) => b.toJson()).toList()))),
+    );
   }
 }

@@ -32,6 +32,7 @@ import (
 	"desktop/plugins/media"
 	"desktop/plugins/notifications"
 	"desktop/plugins/remoteinput"
+	"desktop/plugins/workspace"
 )
 
 const (
@@ -68,13 +69,14 @@ type WeDropService struct {
 
 	// Health, notifications, clipboard, media, remote input, and files each
 	// moved to their own plugin (desktop/plugins/*) — see s.registry.
-	registry       *plugin.Registry
-	healthPlugin   *health.Plugin
-	notifsPlugin   *notifications.Plugin
-	clipPlugin     *clipboard.Plugin
-	mediaPlugin    *media.Plugin
-	remoteinPlugin *remoteinput.Plugin
-	filesPlugin    *files.Plugin
+	registry        *plugin.Registry
+	healthPlugin    *health.Plugin
+	notifsPlugin    *notifications.Plugin
+	clipPlugin      *clipboard.Plugin
+	mediaPlugin     *media.Plugin
+	remoteinPlugin  *remoteinput.Plugin
+	filesPlugin     *files.Plugin
+	workspacePlugin *workspace.Plugin
 
 	stopChan chan struct{}
 	stopOnce sync.Once
@@ -241,6 +243,10 @@ func (s *WeDropService) initCore() error {
 	s.filesPlugin = files.New(s.peerName, s.deviceName)
 	if err := s.registry.Register(s.filesPlugin, true); err != nil {
 		return fmt.Errorf("register files plugin: %w", err)
+	}
+	s.workspacePlugin = workspace.New()
+	if err := s.registry.Register(s.workspacePlugin, true); err != nil {
+		return fmt.Errorf("register workspace plugin: %w", err)
 	}
 	s.manager.OnTransferOffer = func(conn *transport.SecureConn, peer protocol.DeviceInfo, offer protocol.TransferOffer) {
 		s.registry.HandleTransferOffer(conn, peer, offer)
@@ -634,6 +640,9 @@ func (h pluginHost) LoadPluginSettings(id plugin.ID) []byte {
 			AutoAccept:  settings.AutoAcceptFiles,
 			DownloadDir: settings.DownloadDir,
 		})
+		return data
+	case workspace.ID:
+		data, _ := json.Marshal(workspace.Settings{AllowAutomation: settings.AllowAutomation})
 		return data
 	}
 	return nil

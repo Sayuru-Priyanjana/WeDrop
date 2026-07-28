@@ -8,6 +8,7 @@ import '../core/protocol/messages.dart';
 import 'media_controller_screen.dart';
 import 'theme.dart';
 import 'widgets.dart';
+import 'workspace_tab.dart';
 
 /// The per-device remote — a KDE-Connect-style control surface.
 ///
@@ -31,7 +32,7 @@ class DeviceScreen extends StatefulWidget {
 }
 
 class _DeviceScreenState extends State<DeviceScreen> with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 3, vsync: this);
+  late final TabController _tabs = TabController(length: 4, vsync: this);
 
   @override
   void initState() {
@@ -118,6 +119,7 @@ class _DeviceScreenState extends State<DeviceScreen> with SingleTickerProviderSt
             Tab(text: 'Overview', icon: Icon(Icons.dashboard_rounded, size: 18)),
             Tab(text: 'Remote', icon: Icon(Icons.mouse_rounded, size: 18)),
             Tab(text: 'Present', icon: Icon(Icons.slideshow_rounded, size: 18)),
+            Tab(text: 'Workspace', icon: Icon(Icons.dashboard_customize_rounded, size: 18)),
           ],
         ),
       ),
@@ -134,6 +136,7 @@ class _DeviceScreenState extends State<DeviceScreen> with SingleTickerProviderSt
                 _OverviewTab(service: widget.service, device: device, health: health, media: media),
                 _RemoteTab(service: widget.service, device: device),
                 _PresentTab(service: widget.service, device: device),
+                WorkspaceTab(service: widget.service, device: device),
               ],
             ),
     );

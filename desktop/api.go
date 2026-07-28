@@ -96,6 +96,7 @@ func (s *WeDropService) GetState() AppState {
 			AllowFiles:         device.AllowFiles,
 			AllowNotifications: device.AllowNotifications,
 			AllowMedia:         device.AllowMedia,
+			AllowWorkspace:     device.AllowWorkspace,
 			PairedAt:           device.PairedAt,
 			LastSeen:           device.LastSeen,
 			Battery:            -1,

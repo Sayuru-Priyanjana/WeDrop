@@ -118,6 +118,7 @@ export namespace main {
 	    allow_files: boolean;
 	    allow_notifications: boolean;
 	    allow_media: boolean;
+	    allow_workspace: boolean;
 	    paired_at: number;
 	    last_seen: number;
 	    health?: protocol.DeviceHealth;
@@ -142,6 +143,7 @@ export namespace main {
 	        this.allow_files = source["allow_files"];
 	        this.allow_notifications = source["allow_notifications"];
 	        this.allow_media = source["allow_media"];
+	        this.allow_workspace = source["allow_workspace"];
 	        this.paired_at = source["paired_at"];
 	        this.last_seen = source["last_seen"];
 	        this.health = this.convertValues(source["health"], protocol.DeviceHealth);
@@ -403,6 +405,7 @@ export namespace storage {
 	    share_notifications: boolean;
 	    receive_notifications: boolean;
 	    allow_media_control: boolean;
+	    allow_automation: boolean;
 	    discoverable: boolean;
 	    accept_new_pairing: boolean;
 	    run_in_background: boolean;
@@ -424,6 +427,7 @@ export namespace storage {
 	        this.share_notifications = source["share_notifications"];
 	        this.receive_notifications = source["receive_notifications"];
 	        this.allow_media_control = source["allow_media_control"];
+	        this.allow_automation = source["allow_automation"];
 	        this.discoverable = source["discoverable"];
 	        this.accept_new_pairing = source["accept_new_pairing"];
 	        this.run_in_background = source["run_in_background"];

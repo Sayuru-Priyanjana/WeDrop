@@ -128,6 +128,88 @@ class SectionHeader extends StatelessWidget {
   }
 }
 
+/// The small uppercase heading that labels a group *inside* a [WdCard].
+///
+/// Distinct from [SectionHeader], which titles a whole page section at a
+/// larger size — using that one inside a card makes the card's own label
+/// compete with the screen title for attention.
+class CardLabel extends StatelessWidget {
+  final String text;
+  final Widget? trailing;
+
+  const CardLabel(this.text, {super.key, this.trailing});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Space.md),
+      child: Row(
+        children: [
+          Expanded(child: Text(text.toUpperCase(), style: AppText.eyebrow)),
+          ?trailing,
+        ],
+      ),
+    );
+  }
+}
+
+/// A tappable tile with an icon over a label — the shape used for every
+/// mouse-click, scroll and presentation control.
+///
+/// This exists because those controls had drifted into five near-identical
+/// private builders, each with its own height, radius and colour; one
+/// primitive with an [active] state keeps them visually identical and makes
+/// a toggle (the laser pointer) just another instance rather than a sixth
+/// variant.
+class WdActionTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  /// Renders the tile in its "on" state, for controls that toggle.
+  final bool active;
+
+  /// Taller, for primary controls that sit alone in a row.
+  final bool prominent;
+
+  const WdActionTile({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.active = false,
+    this.prominent = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = active ? WeDropColors.brandSoft : WeDropColors.inkDim;
+
+    return Material(
+      color: active
+          ? WeDropColors.brand.withValues(alpha: 0.16)
+          : WeDropColors.surfaceHi,
+      borderRadius: BorderRadius.circular(Radii.control),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(Radii.control),
+        child: Container(
+          height: prominent ? 60 : 52,
+          alignment: Alignment.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: prominent ? 22 : 18, color: foreground),
+              const SizedBox(height: Space.xs),
+              Text(label, style: AppText.caption.copyWith(color: foreground)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class StatusDot extends StatelessWidget {
   /// One of: connected, online, offline.
   final String state;
