@@ -74,6 +74,10 @@ export function SendMediaCommand(arg1, arg2) {
   return window['go']['main']['WeDropService']['SendMediaCommand'](arg1, arg2);
 }
 
+export function SendMediaSeek(arg1, arg2) {
+  return window['go']['main']['WeDropService']['SendMediaSeek'](arg1, arg2);
+}
+
 export function SendMouseClick(arg1, arg2) {
   return window['go']['main']['WeDropService']['SendMouseClick'](arg1, arg2);
 }

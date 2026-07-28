@@ -472,6 +472,16 @@ func (s *WeDropService) ControlLocalMedia(command string) error {
 	return s.mediaPlugin.ControlLocal(command)
 }
 
+// SendMediaSeek asks a paired device to jump to an absolute position (in
+// milliseconds) in its current track — what dragging the desktop Now
+// Playing card's seek bar does.
+func (s *WeDropService) SendMediaSeek(deviceID string, positionMs int64) error {
+	if !s.trust.IsTrusted(deviceID) {
+		return fmt.Errorf("that device is not in your ecosystem")
+	}
+	return s.mediaPlugin.SendSeek(deviceID, positionMs)
+}
+
 // ---------------------------------------------------------------- remote input
 
 // SendMouseMove drives a peer's cursor by a relative delta.

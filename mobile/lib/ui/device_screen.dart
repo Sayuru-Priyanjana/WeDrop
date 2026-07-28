@@ -430,8 +430,30 @@ class _SeekBar extends StatefulWidget {
 
 class _SeekBarState extends State<_SeekBar> {
   // Held while the user is actively dragging, so incoming live-position updates
-  // don't yank the thumb out from under their finger mid-drag.
+  // don't yank the thumb out from under their finger mid-drag. Also held
+  // (optimistically) for a short window right after release: the peer only
+  // confirms the seek once its next MediaState round-trips back, which is
+  // visibly slower than the drag itself, so releasing it immediately made the
+  // thumb jump back to the pre-seek position before snapping to the real one.
   double? _dragValue;
+  Timer? _confirmTimeout;
+
+  @override
+  void didUpdateWidget(_SeekBar old) {
+    super.didUpdateWidget(old);
+    // A fresh position close to what we asked for confirms the seek landed —
+    // stop overriding it with the optimistic value.
+    if (_dragValue != null && (widget.position - _dragValue!).abs() < 1500) {
+      _confirmTimeout?.cancel();
+      setState(() => _dragValue = null);
+    }
+  }
+
+  @override
+  void dispose() {
+    _confirmTimeout?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -469,7 +491,15 @@ class _SeekBarState extends State<_SeekBar> {
             onChanged: (v) => setState(() => _dragValue = v),
             onChangeEnd: (v) {
               widget.onSeek(v.toInt());
-              setState(() => _dragValue = null);
+              // Keep showing the target the user dropped the thumb on until
+              // the peer's next MediaState confirms it (see didUpdateWidget)
+              // or this fallback timeout gives up and reverts to whatever
+              // the peer actually reports.
+              setState(() => _dragValue = v);
+              _confirmTimeout?.cancel();
+              _confirmTimeout = Timer(const Duration(seconds: 4), () {
+                if (mounted) setState(() => _dragValue = null);
+              });
             },
           ),
         ),

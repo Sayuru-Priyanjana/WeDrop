@@ -45,6 +45,7 @@ func collectNowPlaying() protocol.MediaState {
 		Position: snapshot.PositionMs,
 		Duration: snapshot.DurationMs,
 		Volume:   getSystemVolumePercent(),
+		Artwork:  localArtwork.Artwork(),
 	}
 }
 

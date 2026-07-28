@@ -39,6 +39,8 @@ export function SendKey(arg1:string,arg2:string):Promise<void>;
 
 export function SendMediaCommand(arg1:string,arg2:string):Promise<void>;
 
+export function SendMediaSeek(arg1:string,arg2:number):Promise<void>;
+
 export function SendMouseClick(arg1:string,arg2:string):Promise<void>;
 
 export function SendMouseMove(arg1:string,arg2:number,arg3:number):Promise<void>;

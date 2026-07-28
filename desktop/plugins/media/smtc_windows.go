@@ -199,6 +199,47 @@ func getCurrentSMTCSession(ctx context.Context) (*libnp.IGlobalSystemMediaTransp
 
 // ---- Seek, via IAsyncInfo status polling (see the file comment for why) ----
 
+// sessionVtblFixed is IGlobalSystemMediaTransportControlsSession's vtable,
+// corrected. go-libnp's own IGlobalSystemMediaTransportControlsSessionVtbl
+// (libnp_windows.go) omits the TryPlayAsync slot that the real interface has
+// between GetPlaybackInfo and TryPauseAsync — confirmed against
+// microsoft/windows-rs's mechanically-generated bindings, not guessed. That
+// missing slot shifts every method after it by one, so go-libnp's own
+// "TryChangePlaybackPositionAsync" field is actually bound to the real
+// TryChangeShuffleActiveAsync: calling it "succeeds" (the async op completes
+// and reports true) while never moving playback position, since it is really
+// toggling shuffle. Confirmed by direct testing: a live seek call reported
+// success with the position unchanged. This struct exists solely to reach
+// the correctly-offset slot for the one call this file needs; every other
+// call in this file (GetTimelineProperties, GetPlaybackInfo,
+// TryGetMediaPropertiesAsync) sits before the missing slot and is unaffected.
+type sessionVtblFixed struct {
+	ole.IInspectableVtbl
+	GetSourceAppUserModelId        uintptr
+	TryGetMediaPropertiesAsync     uintptr
+	GetTimelineProperties          uintptr
+	GetPlaybackInfo                uintptr
+	TryPlayAsync                   uintptr
+	TryPauseAsync                  uintptr
+	TryStopAsync                   uintptr
+	TryRecordAsync                 uintptr
+	TryFastForwardAsync            uintptr
+	TryRewindAsync                 uintptr
+	TrySkipNextAsync               uintptr
+	TrySkipPreviousAsync           uintptr
+	TryChangeChannelUpAsync        uintptr
+	TryChangeChannelDownAsync      uintptr
+	TryTogglePlayPauseAsync        uintptr
+	TryChangeAutoRepeatModeAsync   uintptr
+	TryChangePlaybackRateAsync     uintptr
+	TryChangeShuffleActiveAsync    uintptr
+	TryChangePlaybackPositionAsync uintptr
+}
+
+func sessionVtable(session *libnp.IGlobalSystemMediaTransportControlsSession) *sessionVtblFixed {
+	return (*sessionVtblFixed)(unsafe.Pointer(session.RawVTable))
+}
+
 var iidAsyncInfo = ole.NewGUID("00000036-0000-0000-C000-000000000046")
 
 // asyncOpHandle is a minimal, TResult-agnostic view of any WinRT async
@@ -294,7 +335,7 @@ func waitAsyncOpByPolling(op *asyncOpHandle, timeout time.Duration) (bool, error
 func trySeek(session *libnp.IGlobalSystemMediaTransportControlsSession, positionMs int64) (bool, error) {
 	var opPtr unsafe.Pointer
 	hr, _, _ := syscall.Syscall(
-		session.VTable().TryChangePlaybackPositionAsync,
+		sessionVtable(session).TryChangePlaybackPositionAsync,
 		3,
 		uintptr(unsafe.Pointer(session)),
 		uintptr(positionMs*10000), // milliseconds -> 100ns units

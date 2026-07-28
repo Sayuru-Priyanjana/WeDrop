@@ -88,6 +88,7 @@ func (p *Plugin) handleCommand(from plugin.PeerRef, raw []byte) error {
 			return err
 		}
 		p.api.Emit("applied", msg.Command)
+		p.broadcastNowPlaying()
 		return nil
 	}
 	if msg.Command == protocol.MediaSetVolume {
@@ -95,6 +96,7 @@ func (p *Plugin) handleCommand(from plugin.PeerRef, raw []byte) error {
 			return err
 		}
 		p.api.Emit("applied", msg.Command)
+		p.broadcastNowPlaying()
 		return nil
 	}
 
@@ -102,6 +104,11 @@ func (p *Plugin) handleCommand(from plugin.PeerRef, raw []byte) error {
 		return err
 	}
 	p.api.Emit("applied", msg.Command)
+	// The command was just applied (e.g. simulated media keys for
+	// play/pause/next/prev), so the sender's UI would otherwise sit on stale
+	// data until the next periodic tick (nowPlayingInterval) — push a fresh
+	// snapshot right away instead of making them wait.
+	p.broadcastNowPlaying()
 	return nil
 }
 
@@ -193,6 +200,17 @@ func (p *Plugin) SendCommand(deviceID, command string) error {
 // the host for the Wails-bound ControlLocalMedia.
 func (p *Plugin) ControlLocal(command string) error {
 	return applyMediaCommand(command)
+}
+
+// SendSeek asks a peer to jump to an absolute position in its current
+// track — used by the host (desktop/api.go) for the Wails-bound
+// SendMediaSeek, which backs the desktop Now Playing card's seek bar.
+func (p *Plugin) SendSeek(deviceID string, positionMs int64) error {
+	return p.api.Send(deviceID, protocol.MediaMessage{
+		Type:     protocol.TypeMedia,
+		Command:  protocol.MediaSeek,
+		Position: positionMs,
+	})
 }
 
 // StateOf returns the last known media state a peer reported, if it has

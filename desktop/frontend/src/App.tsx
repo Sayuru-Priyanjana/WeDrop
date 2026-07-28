@@ -16,6 +16,7 @@ import {
   SelectFiles,
   SendFiles,
   SendMediaCommand,
+  SendMediaSeek,
   SetDeviceName,
   SetDevicePermission,
   UnpairDevice,
@@ -202,6 +203,7 @@ export default function App() {
               onUnpair={setUnpairTarget}
               onPermission={(id, cap, allowed) => run(SetDevicePermission(id, cap, allowed))}
               onMedia={(id, command) => run(SendMediaCommand(id, command))}
+              onSeek={(id, positionMs) => run(SendMediaSeek(id, positionMs))}
             />
           )}
 
@@ -375,6 +377,7 @@ function DevicesTab({
   onUnpair,
   onPermission,
   onMedia,
+  onSeek,
 }: {
   state: main.AppState;
   pairingWith: string | null;
@@ -383,6 +386,7 @@ function DevicesTab({
   onUnpair: (device: main.DeviceView) => void;
   onPermission: (deviceId: string, capability: string, allowed: boolean) => void;
   onMedia: (deviceId: string, command: string) => void;
+  onSeek: (deviceId: string, positionMs: number) => void;
 }) {
   return (
     <div className="space-y-10">
@@ -415,6 +419,7 @@ function DevicesTab({
                 onUnpair={onUnpair}
                 onPermission={onPermission}
                 onMedia={onMedia}
+                onSeek={onSeek}
                 showAdvanced={state.settings.show_advanced_features}
               />
             ))}

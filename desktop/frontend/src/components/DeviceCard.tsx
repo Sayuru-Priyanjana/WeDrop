@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import type { main, protocol } from "../../wailsjs/go/models";
 import { Badge, Button, IconButton, StatusDot, Toggle } from "./ui";
 import {
@@ -24,6 +25,7 @@ export function PairedDeviceCard({
   onUnpair,
   onPermission,
   onMedia,
+  onSeek,
   showAdvanced,
 }: {
   device: Device;
@@ -31,6 +33,7 @@ export function PairedDeviceCard({
   onUnpair: (device: Device) => void;
   onPermission: (deviceId: string, capability: string, allowed: boolean) => void;
   onMedia: (deviceId: string, command: string) => void;
+  onSeek: (deviceId: string, positionMs: number) => void;
   showAdvanced: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -92,7 +95,12 @@ export function PairedDeviceCard({
       )}
 
       {/* Now-playing, when the peer reports it. */}
-      {device.connected && device.media?.has_media && <NowPlaying media={device.media} />}
+      {device.connected && device.media?.has_media && (
+        <NowPlaying
+          media={device.media}
+          onSeek={(positionMs) => onSeek(device.device_id, positionMs)}
+        />
+      )}
 
       {/* Media remote, only useful while a session is actually live. */}
       {device.connected && device.allow_media && (
@@ -226,10 +234,20 @@ function HealthStrip({
   );
 }
 
-/** Now-playing summary with a track progress bar. */
-function NowPlaying({ media }: { media: protocol.MediaState }) {
+/** Now-playing summary with album art and a draggable seek bar. */
+function NowPlaying({
+  media,
+  onSeek,
+}: {
+  media: protocol.MediaState;
+  onSeek: (positionMs: number) => void;
+}) {
   const known = media.position >= 0 && media.duration > 0;
-  const ratio = known ? Math.min(1, media.position / media.duration) : 0;
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [dragRatio, setDragRatio] = useState<number | null>(null);
+
+  const liveRatio = known ? Math.min(1, media.position / media.duration) : 0;
+  const ratio = dragRatio ?? liveRatio;
 
   const fmt = (ms: number) => {
     const total = Math.floor(ms / 1000);
@@ -238,22 +256,75 @@ function NowPlaying({ media }: { media: protocol.MediaState }) {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
+  const ratioAt = (clientX: number) => {
+    const el = trackRef.current;
+    if (!el) return 0;
+    const rect = el.getBoundingClientRect();
+    return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+  };
+
+  const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!known) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDragRatio(ratioAt(e.clientX));
+  };
+
+  const handlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (dragRatio === null) return;
+    setDragRatio(ratioAt(e.clientX));
+  };
+
+  const handlePointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (dragRatio === null) return;
+    const finalRatio = ratioAt(e.clientX);
+    setDragRatio(null);
+    onSeek(Math.round(finalRatio * media.duration));
+  };
+
   return (
     <div className="border-t border-border/60 px-5 py-3">
-      <div className="flex items-center gap-2 text-[12.5px]">
-        <span className="text-accent">♪</span>
-        <span className="truncate font-medium text-ink">{media.title || "Unknown track"}</span>
-        {media.artist && <span className="truncate text-ink-faint">— {media.artist}</span>}
+      <div className="flex items-center gap-3">
+        {media.artwork ? (
+          <img
+            src={`data:image/jpeg;base64,${media.artwork}`}
+            alt=""
+            className="h-10 w-10 shrink-0 rounded-lg object-cover"
+          />
+        ) : (
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-hi text-accent">
+            ♪
+          </div>
+        )}
+        <div className="min-w-0 flex-1 text-[12.5px]">
+          <div className="truncate font-medium text-ink">{media.title || "Unknown track"}</div>
+          {media.artist && <div className="truncate text-ink-faint">{media.artist}</div>}
+        </div>
       </div>
-      <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-border">
-        <div
-          className="h-full rounded-full bg-gradient-to-r from-accent to-brand transition-[width] duration-500"
-          style={{ width: `${ratio * 100}%` }}
-        />
+      <div
+        ref={trackRef}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        className={`group relative mt-2.5 flex h-3 w-full items-center ${known ? "cursor-pointer" : ""}`}
+      >
+        <div className="h-1 w-full overflow-hidden rounded-full bg-border">
+          <div
+            className={`h-full rounded-full bg-gradient-to-r from-accent to-brand ${
+              dragRatio === null ? "transition-[width] duration-500" : ""
+            }`}
+            style={{ width: `${ratio * 100}%` }}
+          />
+        </div>
+        {known && (
+          <div
+            className="absolute h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-ink opacity-0 shadow transition-opacity group-hover:opacity-100"
+            style={{ left: `${ratio * 100}%` }}
+          />
+        )}
       </div>
       {known && (
         <div className="mt-1 flex justify-between text-[10.5px] text-ink-faint">
-          <span>{fmt(media.position)}</span>
+          <span>{fmt(dragRatio === null ? media.position : ratio * media.duration)}</span>
           <span>{fmt(media.duration)}</span>
         </div>
       )}
