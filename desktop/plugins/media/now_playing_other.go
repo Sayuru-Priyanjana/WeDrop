@@ -9,7 +9,8 @@ import "wedrop/core/protocol"
 const nowPlayingInterval = 0
 
 // collectNowPlaying has no implementation on this platform yet; reporting "no
-// media" is the honest answer rather than fabricating one.
-func collectNowPlaying() protocol.MediaState {
+// media" is the honest answer rather than fabricating one. playerID is
+// accepted only so callers compile identically across platforms.
+func collectNowPlaying(playerID string) protocol.MediaState {
 	return protocol.MediaState{Type: protocol.TypeMediaState, HasMedia: false}
 }

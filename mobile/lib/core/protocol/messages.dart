@@ -89,6 +89,19 @@ class MediaCommand {
   /// Sets an absolute system volume level (0-100), as opposed to the
   /// relative nudges volUp/volDown apply.
   static const setVolume = 'set_volume';
+  /// Picks which of the peer's active sessions (MediaState.players) future
+  /// play/pause/next/prev/seek commands target; carries a `player_id`
+  /// argument ("" falls back to whatever the peer itself calls current).
+  static const selectPlayer = 'select_player';
+  /// Makes a `device_id` (from MediaState.audioDevices) the peer's default
+  /// playback device.
+  static const selectAudioDevice = 'select_audio_device';
+  /// Sets one running app's own mixer volume on the peer, as opposed to
+  /// setVolume (the whole system); carries `app_id` + `volume`.
+  static const setAppVolume = 'set_app_volume';
+  /// Mutes/unmutes one running app's own mixer channel on the peer; carries
+  /// `app_id` + `muted`.
+  static const setAppMute = 'set_app_mute';
 }
 
 /// Remote-input actions carried in a [RemoteInput] message.
@@ -308,6 +321,61 @@ class NotificationMessage {
       );
 }
 
+/// One of the peer's active media sessions, for a remote to list and pick
+/// which one to control — mirrors KDE Connect's own player list.
+class PlayerSummary {
+  final String id;
+  final String title;
+  final String artist;
+  final bool playing;
+
+  const PlayerSummary({
+    required this.id,
+    this.title = '',
+    this.artist = '',
+    this.playing = false,
+  });
+
+  factory PlayerSummary.fromJson(Map<String, dynamic> json) => PlayerSummary(
+        id: json['id'] as String? ?? '',
+        title: json['title'] as String? ?? '',
+        artist: json['artist'] as String? ?? '',
+        playing: json['playing'] as bool? ?? false,
+      );
+}
+
+/// One of the peer's playback (output) devices.
+class AudioDeviceSummary {
+  final String id;
+  final String name;
+  final bool isDefault;
+
+  const AudioDeviceSummary({required this.id, this.name = '', this.isDefault = false});
+
+  factory AudioDeviceSummary.fromJson(Map<String, dynamic> json) => AudioDeviceSummary(
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        isDefault: json['default'] as bool? ?? false,
+      );
+}
+
+/// One running app's own mixer channel on the peer.
+class AppVolumeSummary {
+  final String id;
+  final String name;
+  final int volume; // 0-100
+  final bool muted;
+
+  const AppVolumeSummary({required this.id, this.name = '', this.volume = -1, this.muted = false});
+
+  factory AppVolumeSummary.fromJson(Map<String, dynamic> json) => AppVolumeSummary(
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        volume: json['volume'] as int? ?? -1,
+        muted: json['muted'] as bool? ?? false,
+      );
+}
+
 /// What a peer is currently playing, so a remote can render controls.
 class MediaState {
   final bool playing;
@@ -321,6 +389,19 @@ class MediaState {
   /// Base64-encoded JPEG preview of the track/album art, or empty if the
   /// source has none.
   final String artwork;
+  /// Every active session on the peer, not just whatever this state's own
+  /// title/artist/etc. reflect — empty on peers/builds with no multi-player
+  /// support.
+  final List<PlayerSummary> players;
+  /// The id (from players) future commands are scoped to; "" means
+  /// "whatever the peer calls current".
+  final String selectedPlayer;
+  /// The peer's playback devices — empty on peers/builds with no device
+  /// enumeration support.
+  final List<AudioDeviceSummary> audioDevices;
+  /// The peer's active per-app mixer channels — empty on peers/builds with
+  /// no per-app volume support.
+  final List<AppVolumeSummary> appVolumes;
 
   const MediaState({
     this.playing = false,
@@ -332,6 +413,10 @@ class MediaState {
     this.position = -1,
     this.duration = -1,
     this.artwork = '',
+    this.players = const [],
+    this.selectedPlayer = '',
+    this.audioDevices = const [],
+    this.appVolumes = const [],
   });
 
   factory MediaState.fromJson(Map<String, dynamic> json) => MediaState(
@@ -344,6 +429,16 @@ class MediaState {
         position: json['position'] as int? ?? -1,
         duration: json['duration'] as int? ?? -1,
         artwork: json['artwork'] as String? ?? '',
+        players: ((json['players'] as List?) ?? const [])
+            .map((e) => PlayerSummary.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        selectedPlayer: json['selected_player'] as String? ?? '',
+        audioDevices: ((json['audio_devices'] as List?) ?? const [])
+            .map((e) => AudioDeviceSummary.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        appVolumes: ((json['app_volumes'] as List?) ?? const [])
+            .map((e) => AppVolumeSummary.fromJson(e as Map<String, dynamic>))
+            .toList(),
       );
 }
 
@@ -462,11 +557,24 @@ Map<String, dynamic> pingMessage(int seq) => {'type': MsgType.ping, 'seq': seq};
 
 Map<String, dynamic> pongMessage(int seq) => {'type': MsgType.pong, 'seq': seq};
 
-Map<String, dynamic> mediaMessage(String command, {int? position, int? volume}) => {
+Map<String, dynamic> mediaMessage(
+  String command, {
+  int? position,
+  int? volume,
+  String? playerId,
+  String? deviceId,
+  String? appId,
+  bool? muted,
+}) =>
+    {
       'type': MsgType.media,
       'command': command,
       'position': ?position,
       'volume': ?volume,
+      'player_id': ?playerId,
+      'device_id': ?deviceId,
+      'app_id': ?appId,
+      'muted': ?muted,
     };
 
 Map<String, dynamic> unpairMessage(String deviceId) => {

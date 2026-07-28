@@ -36,8 +36,9 @@ type Settings struct {
 type Plugin struct {
 	api plugin.API
 
-	mu    sync.RWMutex
-	peers map[string]protocol.MediaState
+	mu             sync.RWMutex
+	peers          map[string]protocol.MediaState
+	selectedPlayer string // "" means "whatever the platform calls current"
 
 	cancel context.CancelFunc
 }
@@ -83,31 +84,51 @@ func (p *Plugin) handleCommand(from plugin.PeerRef, raw []byte) error {
 		return err
 	}
 
-	if msg.Command == protocol.MediaSeek {
-		if err := trySeekPlatform(msg.Position); err != nil {
+	switch msg.Command {
+	case protocol.MediaSeek:
+		if err := seekPlayer(p.SelectedPlayer(), msg.Position); err != nil {
 			return err
 		}
-		p.api.Emit("applied", msg.Command)
-		p.broadcastNowPlaying()
-		return nil
-	}
-	if msg.Command == protocol.MediaSetVolume {
+	case protocol.MediaSetVolume:
 		if err := setVolumePlatform(msg.Volume); err != nil {
 			return err
 		}
-		p.api.Emit("applied", msg.Command)
-		p.broadcastNowPlaying()
-		return nil
+	case protocol.MediaSelectPlayer:
+		p.setSelectedPlayer(msg.PlayerID)
+	case protocol.MediaSelectAudioDevice:
+		if err := setDefaultAudioDevice(msg.DeviceID); err != nil {
+			return err
+		}
+	case protocol.MediaSetAppVolume:
+		if err := setAppVolumePercent(msg.AppID, msg.Volume); err != nil {
+			return err
+		}
+	case protocol.MediaSetAppMute:
+		if err := setAppMute(msg.AppID, msg.Muted); err != nil {
+			return err
+		}
+	case protocol.MediaPlayPause, protocol.MediaNext, protocol.MediaPrev, protocol.MediaStop:
+		selected := p.SelectedPlayer()
+		var err error
+		if selected != "" {
+			// Precise per-player control via that session's own transport
+			// controls, rather than a simulated key press that only ever
+			// reaches whichever session Windows itself treats as foreground.
+			err = applyCommandToPlayer(selected, msg.Command)
+		} else {
+			err = applyMediaCommand(msg.Command)
+		}
+		if err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("unknown media command %q", msg.Command)
 	}
 
-	if err := applyMediaCommand(msg.Command); err != nil {
-		return err
-	}
 	p.api.Emit("applied", msg.Command)
-	// The command was just applied (e.g. simulated media keys for
-	// play/pause/next/prev), so the sender's UI would otherwise sit on stale
-	// data until the next periodic tick (nowPlayingInterval) — push a fresh
-	// snapshot right away instead of making them wait.
+	// The command was just applied, so the sender's UI would otherwise sit on
+	// stale data until the next periodic tick (nowPlayingInterval) — push a
+	// fresh snapshot right away instead of making them wait.
 	p.broadcastNowPlaying()
 	return nil
 }
@@ -178,7 +199,63 @@ func (p *Plugin) broadcastNowPlaying() {
 	if len(p.api.ConnectedPeers()) == 0 {
 		return
 	}
-	p.api.Broadcast(collectNowPlaying())
+
+	selected := p.SelectedPlayer()
+	state := collectNowPlaying(selected)
+	state.SelectedPlayer = selected
+
+	// Best-effort: any of these can legitimately fail (nothing playing, no
+	// sessions, platform without support) without that being a reason to
+	// withhold the rest of the state.
+	if players, err := listPlayers(); err == nil {
+		state.Players = toPlayerSummaries(players)
+	}
+	if devices, err := listAudioDevices(); err == nil {
+		state.AudioDevices = toAudioDeviceSummaries(devices)
+	}
+	if apps, err := listAppVolumes(); err == nil {
+		state.AppVolumes = toAppVolumeSummaries(apps)
+	}
+
+	p.api.Broadcast(state)
+}
+
+func toPlayerSummaries(players []PlayerInfo) []protocol.PlayerSummary {
+	out := make([]protocol.PlayerSummary, len(players))
+	for i, p := range players {
+		out[i] = protocol.PlayerSummary{ID: p.ID, Title: p.Title, Artist: p.Artist, Playing: p.Playing}
+	}
+	return out
+}
+
+func toAudioDeviceSummaries(devices []AudioDevice) []protocol.AudioDeviceSummary {
+	out := make([]protocol.AudioDeviceSummary, len(devices))
+	for i, d := range devices {
+		out[i] = protocol.AudioDeviceSummary{ID: d.ID, Name: d.Name, Default: d.Default}
+	}
+	return out
+}
+
+func toAppVolumeSummaries(apps []AppVolume) []protocol.AppVolumeSummary {
+	out := make([]protocol.AppVolumeSummary, len(apps))
+	for i, a := range apps {
+		out[i] = protocol.AppVolumeSummary{ID: a.ID, Name: a.Name, Volume: a.Volume, Muted: a.Muted}
+	}
+	return out
+}
+
+// SelectedPlayer is the id of the session future local commands are scoped
+// to, or "" for "whatever the platform calls current".
+func (p *Plugin) SelectedPlayer() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.selectedPlayer
+}
+
+func (p *Plugin) setSelectedPlayer(id string) {
+	p.mu.Lock()
+	p.selectedPlayer = id
+	p.mu.Unlock()
 }
 
 // SendCommand asks a peer to act on its playback — used by the host

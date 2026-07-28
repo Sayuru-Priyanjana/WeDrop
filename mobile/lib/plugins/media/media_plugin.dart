@@ -146,8 +146,23 @@ class MediaPlugin implements WeDropPlugin {
     String command, {
     int? position,
     int? volume,
+    String? playerId,
+    String? deviceId,
+    String? appId,
+    bool? muted,
   }) {
-    return _api.send(targetDeviceId, mediaMessage(command, position: position, volume: volume));
+    return _api.send(
+      targetDeviceId,
+      mediaMessage(
+        command,
+        position: position,
+        volume: volume,
+        playerId: playerId,
+        deviceId: deviceId,
+        appId: appId,
+        muted: muted,
+      ),
+    );
   }
 
   /// The latest media state reported by a peer, or null if none yet.
@@ -184,6 +199,11 @@ class MediaPlugin implements WeDropPlugin {
       volume: state.volume,
       position: estimatedPosition,
       duration: state.duration,
+      artwork: state.artwork,
+      players: state.players,
+      selectedPlayer: state.selectedPlayer,
+      audioDevices: state.audioDevices,
+      appVolumes: state.appVolumes,
     );
   }
 

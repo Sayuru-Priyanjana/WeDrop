@@ -7,6 +7,7 @@ require (
 	github.com/delthas/go-libnp v0.2.0
 	github.com/go-ole/go-ole v1.3.0
 	github.com/google/uuid v1.6.0
+	github.com/moutend/go-wca v0.3.0
 	github.com/wailsapp/wails/v2 v2.13.0
 	golang.org/x/sys v0.47.0
 	wedrop/core v0.0.0-00010101000000-000000000000

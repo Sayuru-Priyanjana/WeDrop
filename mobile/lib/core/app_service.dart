@@ -628,9 +628,22 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     String command, {
     int? position,
     int? volume,
+    String? playerId,
+    String? deviceId,
+    String? appId,
+    bool? muted,
   }) async {
     try {
-      await _mediaPlugin.sendCommand(targetDeviceId, command, position: position, volume: volume);
+      await _mediaPlugin.sendCommand(
+        targetDeviceId,
+        command,
+        position: position,
+        volume: volume,
+        playerId: playerId,
+        deviceId: deviceId,
+        appId: appId,
+        muted: muted,
+      );
     } catch (error) {
       final name = _store.trusted(targetDeviceId)?.name ?? 'that device';
       _toastController.add('Could not reach $name: $error');

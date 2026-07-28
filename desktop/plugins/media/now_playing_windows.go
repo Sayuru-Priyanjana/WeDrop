@@ -29,8 +29,8 @@ var nowPlayingHangLogged bool
 // controls use. See media_smtc_windows.go for what is and is not implemented
 // and why (in short: real title/artist/position/duration/playing state, but
 // not seek).
-func collectNowPlaying() protocol.MediaState {
-	snapshot, ok := boundedReadSMTCSnapshot()
+func collectNowPlaying(playerID string) protocol.MediaState {
+	snapshot, ok := boundedReadSMTCSnapshot(playerID)
 	if !ok || snapshot == nil || snapshot.Title == "" {
 		return protocol.MediaState{Type: protocol.TypeMediaState, HasMedia: false}
 	}
@@ -54,7 +54,7 @@ func collectNowPlaying() protocol.MediaState {
 // on its own goroutine so a slow cycle cannot block the caller; if it never
 // completes, that one goroutine leaks for the life of the process rather than
 // freezing every future now-playing update.
-func boundedReadSMTCSnapshot() (*smtcSnapshot, bool) {
+func boundedReadSMTCSnapshot(playerID string) (*smtcSnapshot, bool) {
 	type result struct {
 		snapshot *smtcSnapshot
 		ok       bool
@@ -62,7 +62,7 @@ func boundedReadSMTCSnapshot() (*smtcSnapshot, bool) {
 	done := make(chan result, 1)
 
 	go func() {
-		snapshot, ok := safeReadSMTCSnapshot()
+		snapshot, ok := safeReadSMTCSnapshot(playerID)
 		// A send here after the caller has already timed out and stopped
 		// listening is harmless: the channel is buffered (capacity 1).
 		done <- result{snapshot, ok}
@@ -84,7 +84,7 @@ func boundedReadSMTCSnapshot() (*smtcSnapshot, bool) {
 // This recover must live in the same goroutine as the call it guards (see
 // boundedReadSMTCSnapshot), since recover() only catches a panic on the
 // goroutine where it is deferred.
-func safeReadSMTCSnapshot() (snapshot *smtcSnapshot, ok bool) {
+func safeReadSMTCSnapshot(playerID string) (snapshot *smtcSnapshot, ok bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			ok = false
@@ -98,7 +98,13 @@ func safeReadSMTCSnapshot() (snapshot *smtcSnapshot, ok bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), nowPlayingTimeout)
 	defer cancel()
 
-	result, err := readSMTCSnapshot(ctx)
+	session, err := resolvePlayerSession(ctx, playerID)
+	if err != nil || session == nil {
+		return nil, false
+	}
+	defer session.Release()
+
+	result, err := readSMTCSnapshotOf(ctx, session)
 	if err != nil {
 		return nil, false
 	}

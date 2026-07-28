@@ -38,6 +38,67 @@ func setVolumePlatform(percent int) error {
 	return fmt.Errorf("setting an absolute volume is not supported on %s yet", runtime.GOOS)
 }
 
+// listPlayers, applyCommandToPlayer, seekPlayer, listAudioDevices,
+// setDefaultAudioDevice, listAppVolumes and setAppVolumePercent are Windows-
+// only additions (real multi-player/session and Core Audio support) with no
+// implementation here yet; honest "not supported"/empty results rather than
+// guessed behaviour.
+func listPlayers() ([]PlayerInfo, error) {
+	return nil, fmt.Errorf("listing players is not supported on %s yet", runtime.GOOS)
+}
+
+func applyCommandToPlayer(playerID, command string) error {
+	return fmt.Errorf("per-player control is not supported on %s yet", runtime.GOOS)
+}
+
+func seekPlayer(playerID string, positionMs int64) error {
+	return fmt.Errorf("per-player seek is not supported on %s yet", runtime.GOOS)
+}
+
+func listAudioDevices() ([]AudioDevice, error) {
+	return nil, fmt.Errorf("listing audio devices is not supported on %s yet", runtime.GOOS)
+}
+
+func setDefaultAudioDevice(deviceID string) error {
+	return fmt.Errorf("switching the audio device is not supported on %s yet", runtime.GOOS)
+}
+
+func listAppVolumes() ([]AppVolume, error) {
+	return nil, fmt.Errorf("per-app volume is not supported on %s yet", runtime.GOOS)
+}
+
+func setAppVolumePercent(id string, percent int) error {
+	return fmt.Errorf("per-app volume is not supported on %s yet", runtime.GOOS)
+}
+
+func setAppMute(id string, muted bool) error {
+	return fmt.Errorf("per-app volume is not supported on %s yet", runtime.GOOS)
+}
+
+// PlayerInfo, AudioDevice and AppVolume are declared per-platform (see
+// smtc_windows.go / audio_windows.go) since their fields depend on what each
+// platform can actually report; these are the shapes every other platform
+// must match so plugin.go can use them uniformly.
+type PlayerInfo struct {
+	ID      string
+	Title   string
+	Artist  string
+	Playing bool
+}
+
+type AudioDevice struct {
+	ID      string
+	Name    string
+	Default bool
+}
+
+type AppVolume struct {
+	ID     string
+	Name   string
+	Volume int
+	Muted  bool
+}
+
 func linuxMedia(command string) error {
 	var args []string
 

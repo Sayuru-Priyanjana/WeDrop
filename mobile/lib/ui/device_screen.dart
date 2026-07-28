@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../core/app_service.dart';
 import '../core/protocol/messages.dart';
+import 'media_controller_screen.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -312,6 +313,8 @@ class _HealthTile extends StatelessWidget {
 }
 
 /// Now-playing with a scrubbing-style progress bar and transport controls.
+/// Tapping the card (outside its own buttons/seek bar) opens the full
+/// media controller screen.
 class _MediaCard extends StatelessWidget {
   final AppService service;
   final DeviceView device;
@@ -325,6 +328,11 @@ class _MediaCard extends StatelessWidget {
     final hasMedia = m != null && m.hasMedia;
 
     return WdCard(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => MediaControllerScreen(service: service, deviceId: device.deviceId),
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

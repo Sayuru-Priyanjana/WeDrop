@@ -253,6 +253,22 @@ const (
 	// MediaMessage.Volume (0-100) — what a slider sends, as opposed to the
 	// relative nudges MediaVolUp/MediaVolDown apply.
 	MediaSetVolume = "set_volume"
+	// MediaSelectPlayer picks which of the peer's active sessions
+	// (MediaState.Players) future play/pause/next/prev/seek commands target,
+	// carried in MediaMessage.PlayerID — "" (or an id that has since
+	// disappeared) falls back to whatever the platform itself considers
+	// current. Mirrors KDE Connect's own player-selection UI.
+	MediaSelectPlayer = "select_player"
+	// MediaSelectAudioDevice makes MediaMessage.DeviceID the peer's default
+	// playback device (every role — console/multimedia/communications).
+	MediaSelectAudioDevice = "select_audio_device"
+	// MediaSetAppVolume sets one running app's own mixer volume (as opposed
+	// to MediaSetVolume, which is the whole system), carried in
+	// MediaMessage.AppID + Volume.
+	MediaSetAppVolume = "set_app_volume"
+	// MediaSetAppMute mutes/unmutes one running app's own mixer channel,
+	// carried in MediaMessage.AppID + Muted.
+	MediaSetAppMute = "set_app_mute"
 )
 
 // MediaMessage asks the peer to act on its currently playing media.
@@ -263,6 +279,42 @@ type MediaMessage struct {
 	Position int64 `json:"position,omitempty"`
 	// Volume is only meaningful for MediaSetVolume: the target level, 0-100.
 	Volume int `json:"volume,omitempty"`
+	// PlayerID is only meaningful for MediaSelectPlayer — see its constant doc.
+	PlayerID string `json:"player_id,omitempty"`
+	// DeviceID is only meaningful for MediaSelectAudioDevice: the target
+	// output device's id, from MediaState.AudioDevices.
+	DeviceID string `json:"device_id,omitempty"`
+	// AppID is only meaningful for MediaSetAppVolume/MediaSetAppMute: the
+	// target app's id, from MediaState.AppVolumes.
+	AppID string `json:"app_id,omitempty"`
+	// Muted is only meaningful for MediaSetAppMute.
+	Muted bool `json:"muted,omitempty"`
+}
+
+// PlayerSummary describes one of the peer's active media sessions, so a
+// remote can list and pick which one to control — mirrors KDE Connect's own
+// player list, rather than a remote only ever being able to guess at
+// whatever the platform itself currently calls "current".
+type PlayerSummary struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Artist  string `json:"artist"`
+	Playing bool   `json:"playing"`
+}
+
+// AudioDeviceSummary describes one of the peer's playback (render) devices.
+type AudioDeviceSummary struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Default bool   `json:"default"`
+}
+
+// AppVolumeSummary describes one running app's own mixer channel on the peer.
+type AppVolumeSummary struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Volume int    `json:"volume"`
+	Muted  bool   `json:"muted"`
 }
 
 // MediaState reports what the peer is playing, so remotes can render a UI.
@@ -280,6 +332,18 @@ type MediaState struct {
 	// when the source provides one. Empty when there is none — never a
 	// placeholder, so a UI can tell "no art" from "hasn't arrived yet".
 	Artwork string `json:"artwork,omitempty"`
+	// Players lists every active session on the peer, not just whatever this
+	// state's own Title/Artist/etc. reflect — empty on platforms/builds with
+	// no multi-player support. SelectedPlayer is the id (from Players) future
+	// commands are scoped to, "" meaning "whatever the platform calls current".
+	Players        []PlayerSummary `json:"players,omitempty"`
+	SelectedPlayer string          `json:"selected_player,omitempty"`
+	// AudioDevices lists the peer's playback devices — empty on
+	// platforms/builds with no device enumeration support.
+	AudioDevices []AudioDeviceSummary `json:"audio_devices,omitempty"`
+	// AppVolumes lists the peer's active per-app mixer channels — empty on
+	// platforms/builds with no per-app volume support.
+	AppVolumes []AppVolumeSummary `json:"app_volumes,omitempty"`
 }
 
 // DeviceHealth is broadcast periodically so remotes can show a device's status.
