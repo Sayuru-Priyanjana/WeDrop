@@ -69,6 +69,8 @@ class Capability {
   static const files = 'files';
   static const notifications = 'notifications';
   static const media = 'media';
+  // No toggle; always advertised.
+  static const health = 'device-health';
 }
 
 /// Media commands every platform understands.

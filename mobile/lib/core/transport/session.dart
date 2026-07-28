@@ -11,22 +11,22 @@ const Duration keepaliveInterval = Duration(seconds: 25);
 const Duration sessionReadTimeout = Duration(seconds: 70);
 
 /// Callbacks for messages arriving on a control session.
+///
+/// Only onDeviceInfo/onUnpair/onClosed are genuinely core (peer/session
+/// bookkeeping) and get their own callback. Every feature message
+/// (clipboard, notification, media, media_state, health, and any future
+/// type) arrives through the single onMessage callback instead of one
+/// hard-coded callback per feature — this is what lets a plugin registry
+/// route messages by type without the transport layer knowing the feature
+/// list.
 class SessionHandler {
-  final void Function(Session session, ClipboardMessage message)? onClipboard;
-  final void Function(Session session, NotificationMessage message)? onNotification;
-  final void Function(Session session, String command, int? position, int? volume)? onMedia;
-  final void Function(Session session, MediaState state)? onMediaState;
-  final void Function(Session session, DeviceHealth health)? onHealth;
+  final void Function(Session session, String msgType, Map<String, dynamic> raw)? onMessage;
   final void Function(Session session, DeviceInfo info)? onDeviceInfo;
   final void Function(Session session)? onUnpair;
   final void Function(Session session, Object? error)? onClosed;
 
   const SessionHandler({
-    this.onClipboard,
-    this.onNotification,
-    this.onMedia,
-    this.onMediaState,
-    this.onHealth,
+    this.onMessage,
     this.onDeviceInfo,
     this.onUnpair,
     this.onClosed,
@@ -102,36 +102,19 @@ class Session {
         handler.onDeviceInfo?.call(this, peerInfo);
         break;
 
-      case MsgType.clipboard:
-        handler.onClipboard?.call(this, ClipboardMessage.fromJson(message));
-        break;
-
-      case MsgType.notification:
-        handler.onNotification?.call(this, NotificationMessage.fromJson(message));
-        break;
-
-      case MsgType.media:
-        final command = message['command'] as String?;
-        if (command != null) {
-          handler.onMedia?.call(
-            this,
-            command,
-            message['position'] as int?,
-            message['volume'] as int?,
-          );
-        }
-        break;
-
-      case MsgType.mediaState:
-        handler.onMediaState?.call(this, MediaState.fromJson(message));
-        break;
-
-      case MsgType.health:
-        handler.onHealth?.call(this, DeviceHealth.fromJson(message));
-        break;
-
       case MsgType.unpair:
         handler.onUnpair?.call(this);
+        break;
+
+      default:
+        // Every feature message type (clipboard, notification, media,
+        // media_state, health, and anything a future plugin adds) is routed
+        // generically — the transport layer does not know or care what
+        // these types mean, only that something claimed them.
+        final type = message['type'] as String?;
+        if (type != null) {
+          handler.onMessage?.call(this, type, message);
+        }
         break;
     }
   }

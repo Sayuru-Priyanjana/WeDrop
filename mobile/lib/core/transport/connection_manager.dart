@@ -340,11 +340,7 @@ class ConnectionManager {
       connection: result.connection,
       peerInfo: result.peer,
       handler: SessionHandler(
-        onClipboard: handler.onClipboard,
-        onNotification: handler.onNotification,
-        onMedia: handler.onMedia,
-        onMediaState: handler.onMediaState,
-        onHealth: handler.onHealth,
+        onMessage: handler.onMessage,
         onDeviceInfo: handler.onDeviceInfo,
         onUnpair: handler.onUnpair,
         onClosed: (s, error) {

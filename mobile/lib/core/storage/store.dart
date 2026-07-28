@@ -65,6 +65,7 @@ class Settings {
         Capability.files,
         if (receiveNotifications) Capability.notifications,
         if (allowMediaControl) Capability.media,
+        Capability.health,
       ];
 
   Map<String, dynamic> toJson() => {

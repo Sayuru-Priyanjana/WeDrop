@@ -87,12 +87,12 @@ func (s *WeDropService) GetState() AppState {
 			}
 		}
 		if view.Connected {
-			s.peerStateMu.RLock()
-			if h, ok := s.peerHealth[device.DeviceID]; ok {
+			if h, ok := s.healthPlugin.HealthOf(device.DeviceID); ok {
 				hc := h
 				view.Health = &hc
 				view.Battery = h.Battery
 			}
+			s.peerStateMu.RLock()
 			if m, ok := s.peerMedia[device.DeviceID]; ok && m.HasMedia {
 				mc := m
 				view.Media = &mc

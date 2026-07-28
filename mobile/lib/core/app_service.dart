@@ -9,6 +9,8 @@ import 'package:uuid/uuid.dart';
 import 'crypto/identity.dart';
 import 'discovery/discovery_service.dart';
 import 'platform/native_bridge.dart';
+import 'plugin/plugin.dart';
+import 'plugin/registry.dart';
 import 'protocol/messages.dart';
 import 'storage/store.dart';
 import 'transfer/transfer.dart';
@@ -16,6 +18,7 @@ import 'transport/connection_manager.dart';
 import 'transport/framing.dart';
 import 'transport/handshake.dart';
 import 'transport/session.dart';
+import '../plugins/health/health_plugin.dart';
 
 /// A device as the UI sees it: trust store, discovery and session state merged.
 class DeviceView {
@@ -139,6 +142,8 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   late WeDropStore _store;
   late DiscoveryService _discovery;
   late ConnectionManager _manager;
+  late PluginRegistry _plugins;
+  late HealthPlugin _healthPlugin;
 
   /// True once the network stack is fully constructed. Guards the late fields
   /// above so a startup that fails partway — or a test host with no platform
@@ -153,8 +158,8 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   final List<ClipboardEntry> clipboardHistory = [];
   final List<NotificationEntry> notifications = [];
 
-  /// Latest health and media state received from each peer, keyed by device ID.
-  final Map<String, DeviceHealth> peerHealth = {};
+  /// Latest media state received from each peer, keyed by device ID. Health
+  /// moved to the health plugin (plugins/health) — see _healthPlugin.
   final Map<String, MediaState> peerMedia = {};
   final Map<String, DateTime> _peerMediaReceivedAt = {};
 
@@ -169,7 +174,6 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   Stream<String> get toasts => _toastController.stream;
 
   Timer? _clipboardTimer;
-  Timer? _healthTimer;
   Timer? _mediaTicker;
   StreamSubscription? _nativeEvents;
   String _lastClipboardHash = '';
@@ -260,11 +264,7 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
         auth: this,
         localDeviceInfo: _localDeviceInfo,
         handler: SessionHandler(
-          onClipboard: _onClipboard,
-          onNotification: _onNotification,
-          onMedia: _onMedia,
-          onMediaState: _onMediaState,
-          onHealth: _onHealth,
+          onMessage: _onMessage,
           onDeviceInfo: _onDeviceInfo,
           onUnpair: _onUnpair,
           onClosed: (_, error) => _refreshServiceStatus(),
@@ -274,9 +274,16 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
         onSessionChange: (deviceId, connected) {
           if (connected) {
             _store.touchLastSeen(deviceId);
-          } else if (peerMedia.remove(deviceId) != null) {
-            // Stop showing "now playing" for a device that just dropped.
-            NativeBridge.clearMediaNotification();
+            final session = _manager.session(deviceId);
+            if (session != null) {
+              _plugins.onPeerConnected(PeerRef(deviceId, session.peerInfo));
+            }
+          } else {
+            _plugins.onPeerDisconnected(deviceId);
+            if (peerMedia.remove(deviceId) != null) {
+              // Stop showing "now playing" for a device that just dropped.
+              NativeBridge.clearMediaNotification();
+            }
           }
           // Connections changing is exactly what the ongoing "connected
           // devices" notification exists to reflect.
@@ -284,6 +291,10 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
           notifyListeners();
         },
       );
+
+      _plugins = PluginRegistry(_PluginHost(this));
+      _healthPlugin = HealthPlugin(deviceId);
+      _plugins.register(_healthPlugin);
 
       final port = await _manager.start();
       // The network stack is now safe to touch and tear down.
@@ -305,7 +316,7 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
       if (settings.discoverable) await _discovery.start();
 
       _startClipboardWatcher();
-      _startHealthBroadcaster();
+      await _plugins.startAll();
       _startMediaTicker();
       await _wireNativeBridge();
 
@@ -485,6 +496,36 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
 
   // ------------------------------------------------------- session events
 
+  /// Reproduces, verbatim, the dispatch that used to be a fixed callback per
+  /// feature on transport's SessionHandler — this is Step 0 of the
+  /// plugin-architecture migration (see plan): the interface core exposes
+  /// has shrunk to a single generic onMessage, but until each feature is
+  /// actually extracted into its own plugin, this switch keeps behaving
+  /// exactly as before. Later steps replace each case with a plugin lookup.
+  void _onMessage(Session session, String msgType, Map<String, dynamic> raw) {
+    // Offer it to the plugin registry first (features already extracted —
+    // today, device-health); it silently no-ops for anything unclaimed.
+    _plugins.onMessage(session, msgType, raw);
+
+    switch (msgType) {
+      case MsgType.clipboard:
+        _onClipboard(session, ClipboardMessage.fromJson(raw));
+        break;
+      case MsgType.notification:
+        _onNotification(session, NotificationMessage.fromJson(raw));
+        break;
+      case MsgType.media:
+        final command = raw['command'] as String?;
+        if (command != null) {
+          _onMedia(session, command, raw['position'] as int?, raw['volume'] as int?);
+        }
+        break;
+      case MsgType.mediaState:
+        _onMediaState(session, MediaState.fromJson(raw));
+        break;
+    }
+  }
+
   void _onClipboard(Session session, ClipboardMessage message) async {
     if (!settings.receiveClipboard) return;
     if (!_store.allows(session.deviceId, Capability.clipboard)) return;
@@ -579,13 +620,8 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     notifyListeners();
   }
 
-  void _onHealth(Session session, DeviceHealth health) {
-    peerHealth[session.deviceId] = health;
-    notifyListeners();
-  }
-
   /// The latest health reported by a peer, or null if none yet.
-  DeviceHealth? healthOf(String deviceId) => peerHealth[deviceId];
+  DeviceHealth? healthOf(String deviceId) => _healthPlugin.healthOf(deviceId);
 
   /// The latest media state reported by a peer, or null if none yet.
   MediaState? mediaOf(String deviceId) => peerMedia[deviceId];
@@ -1075,13 +1111,6 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     _clipboardTimer = Timer.periodic(_clipboardPoll, (_) => _checkClipboard());
   }
 
-  void _startHealthBroadcaster() {
-    // An initial reading shortly after connecting, then on a steady interval,
-    // so a remote's panel populates quickly and stays fresh.
-    Timer(const Duration(seconds: 2), _broadcastHealth);
-    _healthTimer = Timer.periodic(const Duration(seconds: 10), (_) => _broadcastHealth());
-  }
-
   /// Wakes the UI once a second while any known peer is actively playing with
   /// a known duration, so [interpolatedMediaOf] has a reason to be re-read and
   /// progress bars visibly move. It is a no-op — no timer work, no rebuilds —
@@ -1093,22 +1122,6 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
           peerMedia.values.any((m) => m.hasMedia && m.playing && m.duration > 0);
       if (anyAnimating) notifyListeners();
     });
-  }
-
-  Future<void> _broadcastHealth() async {
-    if (_manager.connectedDevices.isEmpty) return;
-
-    final raw = await NativeBridge.deviceHealth();
-    final health = DeviceHealth(
-      deviceId: deviceId,
-      battery: raw['battery'] as int? ?? -1,
-      charging: raw['charging'] as bool? ?? false,
-      cpuPercent: raw['cpu_percent'] as int? ?? -1,
-      memPercent: raw['mem_percent'] as int? ?? -1,
-      networkType: raw['network_type'] as String? ?? 'offline',
-      networkName: raw['network_name'] as String? ?? '',
-    );
-    await _manager.broadcast('', health.toJson());
   }
 
   Future<void> _checkClipboard() async {
@@ -1174,21 +1187,69 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     NativeBridge.updateServiceStatus(status);
   }
 
+  /// Lets _PluginHost.emit trigger a rebuild without exposing the protected
+  /// ChangeNotifier.notifyListeners() outside this class.
+  void _notifyPlugins() => notifyListeners();
+
   @override
   void dispose() {
     _clipboardTimer?.cancel();
-    _healthTimer?.cancel();
     _mediaTicker?.cancel();
     _nativeEvents?.cancel();
     // Only tear down the network stack if it actually came up; a startup that
     // failed early leaves these late fields unset.
     if (_started) {
+      _plugins.stopAll();
       _manager.stop();
       _discovery.dispose();
     }
     _toastController.close();
     super.dispose();
   }
+}
+
+/// Gives every registered plugin's API a way to reach real peers and
+/// surface events, without any plugin importing ConnectionManager or
+/// Flutter directly. A plugin event is mapped to notifyListeners() since
+/// today no plugin event has a dedicated UI listener — a plugin's state
+/// (e.g. health readings) is read back out through AppService's own
+/// passthrough getters, so a rebuild is all a listener needs.
+class _PluginHost implements PluginHost {
+  final AppService _service;
+  _PluginHost(this._service);
+
+  @override
+  Future<void> send(String deviceId, Map<String, dynamic> message) =>
+      _service._manager.sendTo(deviceId, message);
+
+  @override
+  void broadcast(String capability, Map<String, dynamic> message) {
+    _service._manager.broadcast(capability, message);
+  }
+
+  @override
+  List<PeerRef> connectedPeers(String capability) {
+    final out = <PeerRef>[];
+    for (final deviceId in _service._manager.connectedDevices) {
+      final session = _service._manager.session(deviceId);
+      if (session == null) continue;
+      if (capability.isNotEmpty && !session.supports(capability)) continue;
+      out.add(PeerRef(deviceId, session.peerInfo));
+    }
+    return out;
+  }
+
+  @override
+  void emit(PluginEvent event) => _service._notifyPlugins();
+
+  // Stubbed until the settings/capability de-hardcoding migration adds a
+  // pluginSettings map to Settings; no plugin extracted so far needs
+  // persisted per-plugin settings yet.
+  @override
+  Map<String, dynamic> loadPluginSettings(PluginId id) => const {};
+
+  @override
+  Future<void> savePluginSettings(PluginId id, Map<String, dynamic> data) async {}
 }
 
 /// Keeps a fast transfer from rebuilding the widget tree on every chunk.

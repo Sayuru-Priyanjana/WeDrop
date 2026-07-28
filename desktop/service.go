@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -22,10 +23,13 @@ import (
 	"wedrop/core/crypto"
 	"wedrop/core/discovery"
 	"wedrop/core/pairing"
+	"wedrop/core/plugin"
 	"wedrop/core/protocol"
 	"wedrop/core/storage"
 	"wedrop/core/transfer"
 	"wedrop/core/transport"
+
+	"desktop/plugins/health"
 )
 
 const (
@@ -76,10 +80,13 @@ type WeDropService struct {
 	clipSeq      int64
 	clipMu       sync.Mutex
 
-	// Latest health and media state received from each peer, keyed by device ID.
+	// Latest media state received from each peer, keyed by device ID. Health
+	// moved to the health plugin (desktop/plugins/health) — see s.registry.
 	peerStateMu sync.RWMutex
-	peerHealth  map[string]protocol.DeviceHealth
 	peerMedia   map[string]protocol.MediaState
+
+	registry     *plugin.Registry
+	healthPlugin *health.Plugin
 
 	stopChan chan struct{}
 	stopOnce sync.Once
@@ -96,7 +103,6 @@ func NewWeDropService() *WeDropService {
 		pendingIn:   make(map[string]chan bool),
 		clipHistory: newRingBuffer[ClipboardEntry](50),
 		notifs:      newRingBuffer[NotificationView](100),
-		peerHealth:  make(map[string]protocol.DeviceHealth),
 		peerMedia:   make(map[string]protocol.MediaState),
 		stopChan:    make(chan struct{}),
 		settings:    storage.DefaultSettings(),
@@ -228,9 +234,21 @@ func (s *WeDropService) initCore() error {
 	s.manager.LocalDeviceInfo = s.localDeviceInfo
 	s.manager.OnPairingRequest = s.handlePairingRequest
 	s.manager.OnTransferOffer = s.handleTransferOffer
+
+	s.registry = plugin.NewRegistry(pluginHost{s})
+	s.healthPlugin = health.New(s.identity.DeviceID)
+	if err := s.registry.Register(s.healthPlugin, true); err != nil {
+		return fmt.Errorf("register health plugin: %w", err)
+	}
+
 	s.manager.OnSessionChange = func(deviceID string, connected bool) {
 		if connected {
 			s.trust.TouchLastSeen(deviceID)
+			if sess, ok := s.manager.Session(deviceID); ok {
+				s.registry.OnPeerConnected(plugin.PeerRef{DeviceID: deviceID, Info: sess.PeerInfo()})
+			}
+		} else {
+			s.registry.OnPeerDisconnected(deviceID)
 		}
 		s.pushState()
 	}
@@ -251,42 +269,13 @@ func (s *WeDropService) initCore() error {
 		}
 	}
 
+	if err := s.registry.StartAll(s.ctx); err != nil {
+		return fmt.Errorf("start plugins: %w", err)
+	}
+
 	go s.clipboardWatcher()
-	go s.healthBroadcaster()
 	go s.nowPlayingBroadcaster()
 	return nil
-}
-
-// healthBroadcaster periodically sends this device's vitals to the ecosystem so
-// remotes can render a live status panel.
-func (s *WeDropService) healthBroadcaster() {
-	// Prime the CPU sampler and send an initial reading shortly after start,
-	// rather than making the remote wait a full interval for anything to show.
-	collectHealth(s.identity.DeviceID)
-
-	ticker := time.NewTicker(healthInterval)
-	defer ticker.Stop()
-
-	first := time.NewTimer(2 * time.Second)
-	defer first.Stop()
-
-	for {
-		select {
-		case <-s.stopChan:
-			return
-		case <-first.C:
-			s.broadcastHealth()
-		case <-ticker.C:
-			s.broadcastHealth()
-		}
-	}
-}
-
-func (s *WeDropService) broadcastHealth() {
-	if len(s.manager.ConnectedDevices()) == 0 {
-		return
-	}
-	s.manager.Broadcast("", collectHealth(s.identity.DeviceID))
 }
 
 // nowPlayingBroadcaster periodically shares what this device is playing, so a
@@ -727,28 +716,42 @@ func (s *WeDropService) checkClipboard() {
 // and drag the whole transport package into the generated TypeScript models.
 type sessionHandler struct{ s *WeDropService }
 
-func (h sessionHandler) OnClipboard(session *transport.Session, msg protocol.ClipboardMessage) {
-	h.s.onClipboard(session, msg)
-}
+// OnMessage first offers the message to the plugin registry (features
+// already extracted into their own package — today, device-health) and
+// falls back to the not-yet-extracted feature switch below. registry
+// silently no-ops for a message type nothing has claimed, so this ordering
+// is always safe. Once every feature is extracted, the switch disappears
+// entirely.
+func (h sessionHandler) OnMessage(session *transport.Session, msgType protocol.MessageType, raw []byte) {
+	h.s.registry.OnMessage(plugin.PeerRef{DeviceID: session.DeviceID(), Info: session.PeerInfo()}, msgType, raw)
 
-func (h sessionHandler) OnNotification(session *transport.Session, msg protocol.NotificationMessage) {
-	h.s.onNotification(session, msg)
-}
-
-func (h sessionHandler) OnMedia(session *transport.Session, msg protocol.MediaMessage) {
-	h.s.onMedia(session, msg)
-}
-
-func (h sessionHandler) OnMediaState(session *transport.Session, msg protocol.MediaState) {
-	h.s.onMediaState(session, msg)
-}
-
-func (h sessionHandler) OnHealth(session *transport.Session, msg protocol.DeviceHealth) {
-	h.s.onHealth(session, msg)
-}
-
-func (h sessionHandler) OnRemoteInput(session *transport.Session, msg protocol.RemoteInput) {
-	h.s.onRemoteInput(session, msg)
+	switch msgType {
+	case protocol.TypeClipboard:
+		var msg protocol.ClipboardMessage
+		if json.Unmarshal(raw, &msg) == nil {
+			h.s.onClipboard(session, msg)
+		}
+	case protocol.TypeNotification:
+		var msg protocol.NotificationMessage
+		if json.Unmarshal(raw, &msg) == nil {
+			h.s.onNotification(session, msg)
+		}
+	case protocol.TypeMedia:
+		var msg protocol.MediaMessage
+		if json.Unmarshal(raw, &msg) == nil {
+			h.s.onMedia(session, msg)
+		}
+	case protocol.TypeMediaState:
+		var msg protocol.MediaState
+		if json.Unmarshal(raw, &msg) == nil {
+			h.s.onMediaState(session, msg)
+		}
+	case protocol.TypeRemoteInput:
+		var msg protocol.RemoteInput
+		if json.Unmarshal(raw, &msg) == nil {
+			h.s.onRemoteInput(session, msg)
+		}
+	}
 }
 
 func (h sessionHandler) OnDeviceInfo(session *transport.Session, info protocol.DeviceInfo) {
@@ -762,6 +765,54 @@ func (h sessionHandler) OnUnpair(session *transport.Session, msg protocol.Unpair
 func (h sessionHandler) OnClosed(session *transport.Session, err error) {
 	h.s.onClosed(session, err)
 }
+
+// -------------------------------------------------------- plugin.Host
+
+// pluginHost gives every registered plugin's API a way to reach real peers,
+// persist settings, and surface events, without any plugin importing Wails
+// or transport directly. Kept as a separate unexported type for the same
+// reason as sessionHandler: WeDropService itself must only expose methods
+// meant for the frontend.
+type pluginHost struct{ s *WeDropService }
+
+func (h pluginHost) Send(deviceID string, v interface{}) error {
+	return h.s.manager.SendTo(deviceID, v)
+}
+
+func (h pluginHost) Broadcast(capability string, v interface{}) {
+	h.s.manager.Broadcast(capability, v)
+}
+
+func (h pluginHost) ConnectedPeers(capability string) []plugin.PeerRef {
+	ids := h.s.manager.ConnectedDevices()
+	out := make([]plugin.PeerRef, 0, len(ids))
+	for _, id := range ids {
+		sess, ok := h.s.manager.Session(id)
+		if !ok {
+			continue
+		}
+		if capability != "" && !sess.Supports(capability) {
+			continue
+		}
+		out = append(out, plugin.PeerRef{DeviceID: id, Info: sess.PeerInfo()})
+	}
+	return out
+}
+
+func (h pluginHost) Emit(event plugin.Event) {
+	// Today no plugin event has a dedicated frontend listener — a plugin's
+	// state (e.g. health readings) is read back out through GetState, so a
+	// plugin raising an event just needs the next state push to happen.
+	h.s.pushState()
+}
+
+// LoadPluginSettings/SavePluginSettings are stubbed until the settings/
+// capability de-hardcoding migration (see plan) adds a PluginSettings map
+// to storage.Settings; no plugin extracted so far needs persisted
+// per-plugin settings yet.
+func (h pluginHost) LoadPluginSettings(id plugin.ID) []byte { return nil }
+
+func (h pluginHost) SavePluginSettings(id plugin.ID, data []byte) error { return nil }
 
 func (s *WeDropService) onClipboard(session *transport.Session, msg protocol.ClipboardMessage) {
 	settings := s.currentSettings()
@@ -874,13 +925,6 @@ func (s *WeDropService) onMediaState(session *transport.Session, msg protocol.Me
 	s.pushState()
 }
 
-func (s *WeDropService) onHealth(session *transport.Session, msg protocol.DeviceHealth) {
-	s.peerStateMu.Lock()
-	s.peerHealth[session.DeviceID()] = msg
-	s.peerStateMu.Unlock()
-	s.pushState()
-}
-
 func (s *WeDropService) onRemoteInput(session *transport.Session, msg protocol.RemoteInput) {
 	// Remote control is gated by the same per-device media permission as the
 	// media keys — turning off "control my media" also disarms the touchpad and
@@ -984,6 +1028,9 @@ func newTransferID() string { return uuid.NewString() }
 func (s *WeDropService) shutdown(ctx context.Context) {
 	s.stopOnce.Do(func() { close(s.stopChan) })
 
+	if s.registry != nil {
+		s.registry.StopAll()
+	}
 	if s.manager != nil {
 		s.manager.Stop()
 	}

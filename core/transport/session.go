@@ -22,13 +22,15 @@ const (
 // SessionHandler receives decoded messages from a peer. Handlers are called
 // from the session's own read goroutine, one at a time per session, so they
 // must not block for long.
+//
+// Only OnDeviceInfo/OnUnpair/OnClosed are genuinely core (peer/session
+// bookkeeping) and get their own method. Every feature message (clipboard,
+// notification, media, media_state, health, remote_input, and any future
+// type) arrives through the single OnMessage method instead of one
+// hard-coded method per feature — this is what lets a plugin registry route
+// messages by type without the transport layer knowing the feature list.
 type SessionHandler interface {
-	OnClipboard(s *Session, msg protocol.ClipboardMessage)
-	OnNotification(s *Session, msg protocol.NotificationMessage)
-	OnMedia(s *Session, msg protocol.MediaMessage)
-	OnMediaState(s *Session, msg protocol.MediaState)
-	OnHealth(s *Session, msg protocol.DeviceHealth)
-	OnRemoteInput(s *Session, msg protocol.RemoteInput)
+	OnMessage(s *Session, msgType protocol.MessageType, raw []byte)
 	OnDeviceInfo(s *Session, info protocol.DeviceInfo)
 	OnUnpair(s *Session, msg protocol.Unpair)
 	OnClosed(s *Session, err error)
@@ -153,46 +155,19 @@ func (s *Session) dispatch(msgBytes []byte) {
 			s.handler.OnDeviceInfo(s, info)
 		}
 
-	case protocol.TypeClipboard:
-		var msg protocol.ClipboardMessage
-		if json.Unmarshal(msgBytes, &msg) == nil && s.handler != nil {
-			s.handler.OnClipboard(s, msg)
-		}
-
-	case protocol.TypeNotification:
-		var msg protocol.NotificationMessage
-		if json.Unmarshal(msgBytes, &msg) == nil && s.handler != nil {
-			s.handler.OnNotification(s, msg)
-		}
-
-	case protocol.TypeMedia:
-		var msg protocol.MediaMessage
-		if json.Unmarshal(msgBytes, &msg) == nil && s.handler != nil {
-			s.handler.OnMedia(s, msg)
-		}
-
-	case protocol.TypeMediaState:
-		var msg protocol.MediaState
-		if json.Unmarshal(msgBytes, &msg) == nil && s.handler != nil {
-			s.handler.OnMediaState(s, msg)
-		}
-
-	case protocol.TypeHealth:
-		var msg protocol.DeviceHealth
-		if json.Unmarshal(msgBytes, &msg) == nil && s.handler != nil {
-			s.handler.OnHealth(s, msg)
-		}
-
-	case protocol.TypeRemoteInput:
-		var msg protocol.RemoteInput
-		if json.Unmarshal(msgBytes, &msg) == nil && s.handler != nil {
-			s.handler.OnRemoteInput(s, msg)
-		}
-
 	case protocol.TypeUnpair:
 		var msg protocol.Unpair
 		if json.Unmarshal(msgBytes, &msg) == nil && s.handler != nil {
 			s.handler.OnUnpair(s, msg)
+		}
+
+	default:
+		// Every feature message type (clipboard, notification, media,
+		// media_state, health, remote_input, and anything a future plugin
+		// adds) is routed generically — the transport layer does not know
+		// or care what these types mean, only that something claimed them.
+		if s.handler != nil {
+			s.handler.OnMessage(s, msgType, msgBytes)
 		}
 	}
 }

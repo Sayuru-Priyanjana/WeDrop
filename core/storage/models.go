@@ -76,7 +76,7 @@ func (s *Settings) Normalise(defaultDownloadDir string) {
 // Capabilities converts the receive-side settings into the capability list
 // advertised to peers, so they can skip sending what this device would drop.
 func (s *Settings) Capabilities() []string {
-	caps := make([]string, 0, 4)
+	caps := make([]string, 0, 5)
 	if s.ReceiveClipboard {
 		caps = append(caps, protocol.CapClipboard)
 	}
@@ -87,6 +87,7 @@ func (s *Settings) Capabilities() []string {
 	if s.AllowMediaControl {
 		caps = append(caps, protocol.CapMedia)
 	}
+	caps = append(caps, protocol.CapHealth) // no toggle; always receivable
 	return caps
 }
 

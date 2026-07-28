@@ -184,6 +184,9 @@ const (
 	CapFiles         = "files"
 	CapNotifications = "notifications"
 	CapMedia         = "media"
+	// CapHealth is always advertised — there is no user-facing toggle for
+	// device-health reporting, unlike the other capabilities.
+	CapHealth = "device-health"
 )
 
 // DeviceInfo is exchanged right after a session opens and whenever the user
