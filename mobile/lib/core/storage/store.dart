@@ -39,6 +39,11 @@ class Settings {
   bool acceptNewPairing;
   bool runInBackground;
 
+  /// Off by default: keeps the per-device overview down to the basics
+  /// (battery, sound) most people actually look at, with network/CPU/memory
+  /// tucked behind this toggle for anyone who wants the detail.
+  bool showAdvancedFeatures;
+
   Settings({
     this.autoSyncClipboard = true,
     this.receiveClipboard = true,
@@ -50,6 +55,7 @@ class Settings {
     this.discoverable = true,
     this.acceptNewPairing = true,
     this.runInBackground = true,
+    this.showAdvancedFeatures = false,
   });
 
   /// The capabilities advertised to peers, derived from the receive switches so
@@ -72,6 +78,7 @@ class Settings {
         'discoverable': discoverable,
         'accept_new_pairing': acceptNewPairing,
         'run_in_background': runInBackground,
+        'show_advanced_features': showAdvancedFeatures,
       };
 
   factory Settings.fromJson(Map<String, dynamic> json) => Settings(
@@ -85,6 +92,7 @@ class Settings {
         discoverable: json['discoverable'] as bool? ?? true,
         acceptNewPairing: json['accept_new_pairing'] as bool? ?? true,
         runInBackground: json['run_in_background'] as bool? ?? true,
+        showAdvancedFeatures: json['show_advanced_features'] as bool? ?? false,
       );
 
   Settings copy() => Settings.fromJson(toJson());

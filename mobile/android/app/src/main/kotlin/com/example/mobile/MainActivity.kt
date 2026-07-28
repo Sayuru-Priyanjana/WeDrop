@@ -8,6 +8,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.NonNull
 import androidx.core.app.ActivityCompat
 import io.flutter.embedding.android.FlutterActivity
@@ -104,6 +106,17 @@ class MainActivity : FlutterActivity() {
                         )
                         result.success(null)
                     }
+                    "showPairingRequest" -> {
+                        NotificationHelper.showPairingRequest(
+                            this,
+                            call.argument<String>("device_name") ?: "A device",
+                        )
+                        result.success(null)
+                    }
+                    "clearPairingRequest" -> {
+                        NotificationHelper.clearPairingRequest(this)
+                        result.success(null)
+                    }
                     "mediaCommand" -> {
                         val command = call.argument<String>("command") ?: ""
                         // Prefer routing to the actual tracked session (accurate
@@ -137,6 +150,7 @@ class MainActivity : FlutterActivity() {
                             position = (call.argument<Number>("position") ?: -1).toLong(),
                             duration = (call.argument<Number>("duration") ?: -1).toLong(),
                             volume = call.argument<Int>("volume") ?: -1,
+                            artworkBase64 = call.argument<String>("artwork") ?: "",
                         )
                         result.success(null)
                     }
@@ -186,8 +200,11 @@ class MainActivity : FlutterActivity() {
      * Copies anything shared into WeDrop to app storage and tells Dart.
      *
      * A share intent hands over a content:// URI that is only readable while the
-     * intent is alive, so the bytes must be copied out immediately rather than
-     * passing the URI to Dart to open later.
+     * intent is alive, so the bytes must be copied out before the intent goes
+     * away. That copy is genuine disk I/O (can be a large video/archive), so it
+     * runs on a background thread — doing it inline on the main thread here
+     * used to freeze the UI (and risk an ANR) for the entire duration of the
+     * copy, with zero visual feedback, right as the app was launching.
      */
     private fun handleShareIntent(intent: Intent?) {
         if (intent == null) return
@@ -203,14 +220,21 @@ class MainActivity : FlutterActivity() {
             @Suppress("DEPRECATION")
             intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)?.let { uris.addAll(it) }
         }
+        if (uris.isEmpty()) return
 
-        val copied = uris.mapNotNull { copyToCache(it) }
-        if (copied.isEmpty()) return
+        // Tell Dart the import has started so it can show a loading state
+        // immediately, before the (potentially slow) copy finishes.
+        emit(mapOf("type" to "shared_files_importing"))
 
-        // Buffer for consumeSharedFiles and also push live, so it works whether
-        // Dart is already running or being cold-started by the share.
-        pendingShares.addAll(copied)
-        emit(mapOf("type" to "shared_files", "paths" to copied))
+        val mainHandler = Handler(Looper.getMainLooper())
+        Thread {
+            val copied = uris.mapNotNull { copyToCache(it) }
+            if (copied.isEmpty()) return@Thread
+            mainHandler.post {
+                pendingShares.addAll(copied)
+                emit(mapOf("type" to "shared_files", "paths" to copied))
+            }
+        }.start()
     }
 
     private fun copyToCache(uri: Uri): String? {

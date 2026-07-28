@@ -5,11 +5,14 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.SystemClock
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import android.util.Base64
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 
@@ -86,18 +89,23 @@ object MediaNotificationHelper {
         position: Long,
         duration: Long,
         volume: Int,
+        artworkBase64: String = "",
     ) {
         if (!NotificationHelper.canPostNotifications(context)) return
         ensureChannel(context)
 
         currentDeviceId = deviceId
         val mediaSession = ensureSession(context)
+        val artwork = decodeArtwork(artworkBase64)
 
         val hasDuration = duration > 0
         val metadata = MediaMetadataCompat.Builder()
             .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title.ifEmpty { "Now playing" })
             .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
-            .apply { if (hasDuration) putLong(MediaMetadataCompat.METADATA_KEY_DURATION, duration) }
+            .apply {
+                if (hasDuration) putLong(MediaMetadataCompat.METADATA_KEY_DURATION, duration)
+                if (artwork != null) putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, artwork)
+            }
             .build()
         mediaSession.setMetadata(metadata)
 
@@ -131,6 +139,7 @@ object MediaNotificationHelper {
             .setContentText(subtitleParts.joinToString(" · "))
             .setSubText(if (deviceName.isNotEmpty()) deviceName else appName)
             .setSmallIcon(android.R.drawable.ic_media_play)
+            .apply { if (artwork != null) setLargeIcon(artwork) }
             .setOngoing(playing)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -156,6 +165,16 @@ object MediaNotificationHelper {
         }
 
         NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
+    }
+
+    private fun decodeArtwork(base64: String): Bitmap? {
+        if (base64.isEmpty()) return null
+        return try {
+            val bytes = Base64.decode(base64, Base64.NO_WRAP)
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        } catch (e: Exception) {
+            null
+        }
     }
 
     fun clear(context: Context) {

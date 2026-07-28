@@ -82,17 +82,27 @@ func readSMTCSnapshot(ctx context.Context) (*smtcSnapshot, error) {
 	if err != nil || session == nil {
 		return nil, err
 	}
+	// Every WinRT/COM call below hands back an independently reference-counted
+	// object that must be released once we are done with it — a rule this file
+	// did not follow at first. Never releasing these leaked one COM reference
+	// per poll cycle (every 2 seconds, for the life of the process), which
+	// manifested as the whole app becoming progressively less responsive the
+	// longer it ran.
+	defer session.Release()
 
 	propsAsync, err := session.TryGetMediaPropertiesAsync()
 	if err != nil {
 		return nil, err
 	}
+	defer propsAsync.Release()
+
 	props, err := waitBounded(ctx, func() (*libnp.IGlobalSystemMediaTransportControlsSessionMediaProperties, error) {
 		return propsAsync.WaitResult("84593A3D-951A-55B6-8353-5205E577797B")
 	})
 	if err != nil {
 		return nil, err
 	}
+	defer props.Release()
 
 	title, err := props.GetTitle()
 	if err != nil {
@@ -115,11 +125,13 @@ func readSMTCSnapshot(ctx context.Context) (*smtcSnapshot, error) {
 		if end, err := timeline.EndTime(); err == nil {
 			snapshot.DurationMs = end / 10000
 		}
+		timeline.Release()
 	}
 	if info, err := getPlaybackInfo(session); err == nil {
 		if status, err := info.PlaybackStatus(); err == nil {
 			snapshot.Playing = status == playbackStatusPlaying
 		}
+		info.Release()
 	}
 
 	return snapshot, nil
@@ -163,18 +175,25 @@ func getCurrentSMTCSession(ctx context.Context) (*libnp.IGlobalSystemMediaTransp
 		return nil, err
 	}
 	managerStatics := (*libnp.IGlobalSystemMediaTransportControlsSessionManagerStatics)(unsafe.Pointer(ins))
+	defer managerStatics.Release()
 
 	managerAsync, err := managerStatics.RequestAsync()
 	if err != nil {
 		return nil, err
 	}
+	defer managerAsync.Release()
+
 	manager, err := waitBounded(ctx, func() (*libnp.IGlobalSystemMediaTransportControlsSessionManager, error) {
 		return managerAsync.WaitResult("10F0074E-923D-5510-8F4A-DDE37754CA0E")
 	})
 	if err != nil {
 		return nil, err
 	}
+	defer manager.Release()
 
+	// GetCurrentSession hands back an independently reference-counted pointer
+	// the caller owns and must Release when done; releasing manager/managerAsync
+	// above does not affect it.
 	return manager.GetCurrentSession()
 }
 
@@ -246,10 +265,13 @@ const (
 // Started state by polling IAsyncInfo.Status, then reports whether it
 // completed successfully.
 func waitAsyncOpByPolling(op *asyncOpHandle, timeout time.Duration) (bool, error) {
+	defer op.Release()
+
 	var info *winrtAsyncInfo
 	if err := op.PutQueryInterface(iidAsyncInfo, &info); err != nil {
 		return false, err
 	}
+	defer info.Release()
 
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -304,6 +326,7 @@ func seekCurrentSession(positionMs int64) error {
 	if session == nil {
 		return errors.New("nothing is currently playing")
 	}
+	defer session.Release()
 
 	ok, err := trySeek(session, positionMs)
 	if err != nil {

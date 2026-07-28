@@ -37,6 +37,9 @@ type Settings struct {
 	RunInBackground bool `json:"run_in_background"`  // keep running when window closes
 	StartOnLogin    bool `json:"start_on_login"`
 	StartMinimized  bool `json:"start_minimized"`
+	// ShowAdvancedFeatures gates network/CPU/memory detail on a peer's health
+	// display; off by default so the common case only shows battery and sound.
+	ShowAdvancedFeatures bool `json:"show_advanced_features"`
 }
 
 // DefaultSettings is the out-of-the-box configuration: syncing is on, because
@@ -55,6 +58,7 @@ func DefaultSettings() Settings {
 		RunInBackground:      true,
 		StartOnLogin:         false,
 		StartMinimized:       false,
+		ShowAdvancedFeatures: false,
 	}
 }
 

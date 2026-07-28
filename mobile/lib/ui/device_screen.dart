@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -183,7 +185,11 @@ class _OverviewTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _HealthGrid(health: health, platform: device.platform),
+        _HealthGrid(
+          health: health,
+          platform: device.platform,
+          showAdvanced: service.settings.showAdvancedFeatures,
+        ),
         const SizedBox(height: 16),
         _MediaCard(service: service, device: device, media: media),
         const SizedBox(height: 16),
@@ -196,7 +202,8 @@ class _OverviewTab extends StatelessWidget {
 class _HealthGrid extends StatelessWidget {
   final DeviceHealth? health;
   final String platform;
-  const _HealthGrid({required this.health, required this.platform});
+  final bool showAdvanced;
+  const _HealthGrid({required this.health, required this.platform, required this.showAdvanced});
 
   @override
   Widget build(BuildContext context) {
@@ -212,21 +219,26 @@ class _HealthGrid extends StatelessWidget {
         value: h == null || h.battery < 0 ? '—' : '${h.battery}%',
         accent: _batteryColour(h?.battery ?? -1),
       ),
-      _HealthTile(
-        icon: _networkIcon(h?.networkType),
-        label: 'Network',
-        value: _networkLabel(h?.networkType),
-      ),
-      _HealthTile(
-        icon: Icons.memory_rounded,
-        label: 'CPU',
-        value: h == null || h.cpuPercent < 0 ? '—' : '${h.cpuPercent}%',
-      ),
-      _HealthTile(
-        icon: Icons.sd_storage_rounded,
-        label: 'Memory',
-        value: h == null || h.memPercent < 0 ? '—' : '${h.memPercent}%',
-      ),
+      // Network/CPU/memory are detail most people never look at day to day —
+      // kept out of the default view and only shown once the user opts in
+      // via Settings > Advanced.
+      if (showAdvanced) ...[
+        _HealthTile(
+          icon: _networkIcon(h?.networkType),
+          label: 'Network',
+          value: _networkLabel(h?.networkType),
+        ),
+        _HealthTile(
+          icon: Icons.memory_rounded,
+          label: 'CPU',
+          value: h == null || h.cpuPercent < 0 ? '—' : '${h.cpuPercent}%',
+        ),
+        _HealthTile(
+          icon: Icons.sd_storage_rounded,
+          label: 'Memory',
+          value: h == null || h.memPercent < 0 ? '—' : '${h.memPercent}%',
+        ),
+      ],
     ];
 
     return GridView.count(
@@ -327,19 +339,36 @@ class _MediaCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           if (hasMedia) ...[
-            Text(m.title.isEmpty ? 'Unknown track' : m.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w600, color: WeDropColors.ink)),
-            if (m.artist.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Text(m.artist,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12.5, color: WeDropColors.inkFaint)),
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (m.artwork.isNotEmpty) ...[
+                  ArtworkThumbnail(base64: m.artwork, size: 52),
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(m.title.isEmpty ? 'Unknown track' : m.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w600, color: WeDropColors.ink)),
+                      if (m.artist.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(m.artist,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12.5, color: WeDropColors.inkFaint)),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
             _SeekBar(
               position: m.position,
@@ -594,10 +623,35 @@ class _RemoteTabState extends State<_RemoteTab> {
   final FocusNode _keyboardFocus = FocusNode();
   Offset? _last;
 
+  // Mouse-move deltas are coalesced here and flushed on a fixed timer instead
+  // of firing a network message per onPanUpdate callback (which can be
+  // dozens per second on a fast drag) — this is what caused the visible lag
+  // between a swipe and the remote cursor catching up.
+  double _pendingDx = 0;
+  double _pendingDy = 0;
+  Timer? _flushTimer;
+
   void _send(RemoteInput input) => widget.service.sendRemoteInput(widget.device.deviceId, input);
+
+  void _queueMove(Offset delta, double devicePixelRatio) {
+    // Normalize by device pixel ratio so a drag of the same physical distance
+    // moves the remote cursor the same amount regardless of the phone's
+    // screen density.
+    _pendingDx += delta.dx / devicePixelRatio;
+    _pendingDy += delta.dy / devicePixelRatio;
+    _flushTimer ??= Timer.periodic(const Duration(milliseconds: 16), (_) => _flushMove());
+  }
+
+  void _flushMove() {
+    if (_pendingDx == 0 && _pendingDy == 0) return;
+    _send(RemoteInput(action: InputAction.mouseMove, dx: _pendingDx, dy: _pendingDy));
+    _pendingDx = 0;
+    _pendingDy = 0;
+  }
 
   @override
   void dispose() {
+    _flushTimer?.cancel();
     _keyboard.dispose();
     _keyboardFocus.dispose();
     super.dispose();
@@ -617,9 +671,12 @@ class _RemoteTabState extends State<_RemoteTab> {
                 if (last == null) return;
                 final delta = d.localPosition - last;
                 _last = d.localPosition;
-                _send(RemoteInput(action: InputAction.mouseMove, dx: delta.dx, dy: delta.dy));
+                _queueMove(delta, MediaQuery.of(context).devicePixelRatio);
               },
-              onPanEnd: (_) => _last = null,
+              onPanEnd: (_) {
+                _last = null;
+                _flushMove();
+              },
               // A single tap is a left click; the OS focus follows the cursor.
               onTap: () => _send(const RemoteInput(action: InputAction.mouseLeft)),
               onLongPress: () {
@@ -711,6 +768,18 @@ class _RemoteTabState extends State<_RemoteTab> {
     } else if (value.length < _previous.length && _previous.startsWith(value)) {
       for (var i = 0; i < _previous.length - value.length; i++) {
         _send(const RemoteInput(action: InputAction.key, key: SpecialKey.backspace));
+      }
+    } else if (value != _previous) {
+      // Anything that isn't a pure append or pure truncate (autocorrect
+      // replacing a word, pasting over a selection, editing mid-string) isn't
+      // a simple diff — falling through here used to send nothing at all and
+      // silently desync the remote text from what's shown locally. Instead,
+      // clear what the remote device has and retype the field from scratch.
+      for (var i = 0; i < _previous.length; i++) {
+        _send(const RemoteInput(action: InputAction.key, key: SpecialKey.backspace));
+      }
+      if (value.isNotEmpty) {
+        _send(RemoteInput(action: InputAction.type, text: value));
       }
     }
     _previous = value;

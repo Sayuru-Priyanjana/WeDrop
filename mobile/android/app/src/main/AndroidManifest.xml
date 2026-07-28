@@ -14,6 +14,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Lets an incoming pairing request wake the screen with a heads-up
+         alert (like an incoming call) instead of being silently missed while
+         the phone is locked or the app is backgrounded. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <!-- Optional: lets the user exempt WeDrop from Doze so long-lived
          connections survive the screen being off. -->

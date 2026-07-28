@@ -24,12 +24,14 @@ export function PairedDeviceCard({
   onUnpair,
   onPermission,
   onMedia,
+  showAdvanced,
 }: {
   device: Device;
   onSendFiles: (deviceId: string) => void;
   onUnpair: (device: Device) => void;
   onPermission: (deviceId: string, capability: string, allowed: boolean) => void;
   onMedia: (deviceId: string, command: string) => void;
+  showAdvanced: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const Glyph = deviceIcon(device.form_factor);
@@ -85,7 +87,9 @@ export function PairedDeviceCard({
       </div>
 
       {/* Live health from the peer, shown while connected. */}
-      {device.connected && device.health && <HealthStrip health={device.health} />}
+      {device.connected && device.health && (
+        <HealthStrip health={device.health} showAdvanced={showAdvanced} />
+      )}
 
       {/* Now-playing, when the peer reports it. */}
       {device.connected && device.media?.has_media && <NowPlaying media={device.media} />}
@@ -179,8 +183,14 @@ function PermissionRow({
   );
 }
 
-/** A compact row of the peer's battery, network and CPU/memory readings. */
-function HealthStrip({ health }: { health: protocol.DeviceHealth }) {
+/** A compact row of the peer's battery (and, once opted in, network/CPU/memory) readings. */
+function HealthStrip({
+  health,
+  showAdvanced,
+}: {
+  health: protocol.DeviceHealth;
+  showAdvanced: boolean;
+}) {
   const items: { icon: React.ReactNode; label: string }[] = [];
 
   if (health.battery >= 0) {
@@ -189,14 +199,18 @@ function HealthStrip({ health }: { health: protocol.DeviceHealth }) {
       label: `${health.battery}%`,
     });
   }
-  if (health.network_type && health.network_type !== "offline") {
-    items.push({
-      icon: health.network_type === "wifi" ? "📶" : "🔌",
-      label: health.network_type === "wifi" ? "Wi-Fi" : "Wired",
-    });
+  // Network/CPU/memory are detail most people never look at day to day —
+  // kept out of the default view, shown only behind Settings > Advanced.
+  if (showAdvanced) {
+    if (health.network_type && health.network_type !== "offline") {
+      items.push({
+        icon: health.network_type === "wifi" ? "📶" : "🔌",
+        label: health.network_type === "wifi" ? "Wi-Fi" : "Wired",
+      });
+    }
+    if (health.cpu_percent >= 0) items.push({ icon: "🧠", label: `CPU ${health.cpu_percent}%` });
+    if (health.mem_percent >= 0) items.push({ icon: "💾", label: `Mem ${health.mem_percent}%` });
   }
-  if (health.cpu_percent >= 0) items.push({ icon: "🧠", label: `CPU ${health.cpu_percent}%` });
-  if (health.mem_percent >= 0) items.push({ icon: "💾", label: `Mem ${health.mem_percent}%` });
 
   if (items.length === 0) return null;
 

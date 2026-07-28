@@ -309,13 +309,16 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       return _StartupError(message: _service.startupError);
     }
 
-    // The outgoing-pairing code overlays whatever tab is showing.
+    // The outgoing-pairing overlay appears the instant the user taps Pair
+    // (showing a spinner while the handshake is still in flight) rather than
+    // waiting for the verification code to arrive, so the tap never feels
+    // like it did nothing during that network round-trip.
     final outgoing = _service.outgoingPairingCode != null
         ? _OutgoingPairingOverlay(
             name: _service.outgoingPairingName ?? 'device',
             code: _service.outgoingPairingCode!,
           )
-        : null;
+        : (_pairingWith != null ? const _PairingHandshakeOverlay() : null);
 
     final connected = _service.connectedCount;
     final unread = _service.notifications.length;
@@ -390,6 +393,13 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           ),
           SafeArea(child: body),
           ?outgoing,
+          if (_service.importingSharedFiles)
+            const Positioned(
+              top: 8,
+              left: 0,
+              right: 0,
+              child: Center(child: _ImportingBanner()),
+            ),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -508,6 +518,76 @@ class _OutgoingPairingOverlay extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Shown the instant a pairing attempt starts, before the handshake has
+/// produced a verification code to display.
+class _PairingHandshakeOverlay extends StatelessWidget {
+  const _PairingHandshakeOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withValues(alpha: 0.65),
+        alignment: Alignment.center,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 32),
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: WeDropColors.surface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: WeDropColors.borderHi),
+          ),
+          child: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 32,
+                height: 32,
+                child: CircularProgressIndicator(strokeWidth: 2.5, color: WeDropColors.brand),
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Connecting…',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: WeDropColors.ink),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A small pill shown while a shared file is still being copied out of the
+/// share-sheet's content:// URI on a background thread.
+class _ImportingBanner extends StatelessWidget {
+  const _ImportingBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: WeDropColors.surface,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: WeDropColors.borderHi),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2, color: WeDropColors.brand),
+          ),
+          SizedBox(width: 10),
+          Text('Importing shared file…', style: TextStyle(fontSize: 13, color: WeDropColors.ink)),
+        ],
       ),
     );
   }

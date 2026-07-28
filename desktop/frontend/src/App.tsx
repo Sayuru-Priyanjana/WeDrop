@@ -415,6 +415,7 @@ function DevicesTab({
                 onUnpair={onUnpair}
                 onPermission={onPermission}
                 onMedia={onMedia}
+                showAdvanced={state.settings.show_advanced_features}
               />
             ))}
           </div>

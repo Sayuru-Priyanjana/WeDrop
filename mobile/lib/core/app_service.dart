@@ -363,9 +363,21 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   /// user to pick a destination device.
   final List<String> pendingSharedFiles = [];
 
+  /// True from the moment a share-sheet intent arrives until the native side
+  /// finishes copying the shared bytes out of the content:// URI — lets the
+  /// UI show a spinner during that (now background-thread) copy instead of
+  /// appearing to do nothing.
+  bool importingSharedFiles = false;
+
   void _onNativeEvent(Map<String, dynamic> event) {
     switch (event['type'] as String?) {
+      case 'shared_files_importing':
+        importingSharedFiles = true;
+        notifyListeners();
+        break;
+
       case 'shared_files':
+        importingSharedFiles = false;
         final paths = (event['paths'] as List?)?.map((e) => e.toString()) ?? const [];
         pendingSharedFiles.addAll(paths);
         notifyListeners();
@@ -400,6 +412,7 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
       position: event['position'] as int? ?? -1,
       duration: event['duration'] as int? ?? -1,
       volume: event['volume'] as int? ?? -1,
+      artwork: event['artwork'] as String? ?? '',
     );
 
     _manager.broadcast(Capability.media, {
@@ -412,6 +425,7 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
       'volume': state.volume,
       'position': state.position,
       'duration': state.duration,
+      'artwork': state.artwork,
     });
   }
 
@@ -557,6 +571,7 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
         position: state.position,
         duration: state.duration,
         volume: state.volume,
+        artwork: state.artwork,
       );
     } else {
       NativeBridge.clearMediaNotification();
@@ -646,6 +661,13 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     pairingPrompt = PairingPrompt(request, completer);
     notifyListeners();
 
+    // The in-app dialog only appears while the app is actually in the
+    // foreground; without this, a request arriving while the phone is
+    // locked or the app is backgrounded produced no visible sign at all.
+    // A high-priority, full-screen-intent notification wakes the screen and
+    // opens the app the same way an incoming call would.
+    unawaited(NativeBridge.showPairingRequest(request.name));
+
     // Time out rather than holding the connection open forever on a request
     // the user never saw.
     final decision = await completer.future.timeout(
@@ -654,6 +676,7 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     );
 
     pairingPrompt = null;
+    unawaited(NativeBridge.clearPairingRequest());
     notifyListeners();
 
     if (decision.accepted) {

@@ -291,6 +291,7 @@ export namespace protocol {
 	    volume: number;
 	    position: number;
 	    duration: number;
+	    artwork?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new MediaState(source);
@@ -307,6 +308,7 @@ export namespace protocol {
 	        this.volume = source["volume"];
 	        this.position = source["position"];
 	        this.duration = source["duration"];
+	        this.artwork = source["artwork"];
 	    }
 	}
 
@@ -328,6 +330,7 @@ export namespace storage {
 	    run_in_background: boolean;
 	    start_on_login: boolean;
 	    start_minimized: boolean;
+	    show_advanced_features: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -348,6 +351,7 @@ export namespace storage {
 	        this.run_in_background = source["run_in_background"];
 	        this.start_on_login = source["start_on_login"];
 	        this.start_minimized = source["start_minimized"];
+	        this.show_advanced_features = source["show_advanced_features"];
 	    }
 	}
 

@@ -264,15 +264,19 @@ type MediaMessage struct {
 
 // MediaState reports what the peer is playing, so remotes can render a UI.
 type MediaState struct {
-	Type    MessageType `json:"type"`
-	Playing bool        `json:"playing"`
-	HasMedia bool       `json:"has_media"` // false means nothing is loaded
-	Title   string      `json:"title"`
-	Artist  string      `json:"artist"`
-	App     string      `json:"app"`
-	Volume  int         `json:"volume"`   // 0-100, -1 when unknown
-	Position int64      `json:"position"` // current position, millis, -1 unknown
-	Duration int64      `json:"duration"` // total length, millis, -1 unknown
+	Type     MessageType `json:"type"`
+	Playing  bool        `json:"playing"`
+	HasMedia bool        `json:"has_media"` // false means nothing is loaded
+	Title    string      `json:"title"`
+	Artist   string      `json:"artist"`
+	App      string      `json:"app"`
+	Volume   int         `json:"volume"`   // 0-100, -1 when unknown
+	Position int64       `json:"position"` // current position, millis, -1 unknown
+	Duration int64       `json:"duration"` // total length, millis, -1 unknown
+	// Artwork is a small base64-encoded JPEG preview of the track/album art,
+	// when the source provides one. Empty when there is none — never a
+	// placeholder, so a UI can tell "no art" from "hasn't arrived yet".
+	Artwork string `json:"artwork,omitempty"`
 }
 
 // DeviceHealth is broadcast periodically so remotes can show a device's status.

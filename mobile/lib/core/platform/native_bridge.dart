@@ -106,6 +106,20 @@ class NativeBridge {
     } catch (_) {}
   }
 
+  /// Alerts the user (waking the screen if needed) that a device wants to pair.
+  static Future<void> showPairingRequest(String deviceName) async {
+    try {
+      await _channel.invokeMethod('showPairingRequest', {'device_name': deviceName});
+    } catch (_) {}
+  }
+
+  /// Clears the pairing-request alert once it has been answered or timed out.
+  static Future<void> clearPairingRequest() async {
+    try {
+      await _channel.invokeMethod('clearPairingRequest');
+    } catch (_) {}
+  }
+
   /// Applies a media command to this device's current playback session.
   static Future<void> applyMediaCommand(String command) async {
     try {
@@ -139,6 +153,7 @@ class NativeBridge {
     required int position,
     required int duration,
     required int volume,
+    String artwork = '',
   }) async {
     try {
       await _channel.invokeMethod('updateMediaNotification', {
@@ -151,6 +166,7 @@ class NativeBridge {
         'position': position,
         'duration': duration,
         'volume': volume,
+        'artwork': artwork,
       });
     } catch (_) {}
   }

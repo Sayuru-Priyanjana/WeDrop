@@ -115,6 +115,10 @@ func openDefaultVolumeEndpoint() (*audioEndpointVolume, error) {
 		return nil, err
 	}
 	enumerator := (*immDeviceEnumerator)(unsafe.Pointer(unk))
+	// The returned *audioEndpointVolume is independently reference-counted
+	// (by Activate, below) and owned by the caller, but this activation
+	// factory object itself is not needed past this function.
+	defer enumerator.Release()
 
 	var devicePtr unsafe.Pointer
 	hr, _, _ := syscall.Syscall6(
@@ -129,6 +133,7 @@ func openDefaultVolumeEndpoint() (*audioEndpointVolume, error) {
 		return nil, ole.NewError(hr)
 	}
 	device := (*immDevice)(devicePtr)
+	defer device.Release()
 
 	var volPtr unsafe.Pointer
 	hr2, _, _ := syscall.Syscall6(
@@ -153,6 +158,8 @@ func getSystemVolumePercent() int {
 	if err != nil {
 		return -1
 	}
+	defer volume.Release()
+
 	level, err := volume.getMasterVolumeLevelScalar()
 	if err != nil {
 		return -1
@@ -179,6 +186,8 @@ func setSystemVolumePercent(percent int) error {
 	if err != nil {
 		return err
 	}
+	defer volume.Release()
+
 	return volume.setMasterVolumeLevelScalar(float32(percent) / 100)
 }
 

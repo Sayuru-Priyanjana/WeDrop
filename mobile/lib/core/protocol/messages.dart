@@ -316,6 +316,9 @@ class MediaState {
   final int volume; // 0-100, -1 unknown
   final int position; // millis, -1 unknown
   final int duration; // millis, -1 unknown
+  /// Base64-encoded JPEG preview of the track/album art, or empty if the
+  /// source has none.
+  final String artwork;
 
   const MediaState({
     this.playing = false,
@@ -326,6 +329,7 @@ class MediaState {
     this.volume = -1,
     this.position = -1,
     this.duration = -1,
+    this.artwork = '',
   });
 
   factory MediaState.fromJson(Map<String, dynamic> json) => MediaState(
@@ -337,6 +341,7 @@ class MediaState {
         volume: json['volume'] as int? ?? -1,
         position: json['position'] as int? ?? -1,
         duration: json['duration'] as int? ?? -1,
+        artwork: json['artwork'] as String? ?? '',
       );
 }
 

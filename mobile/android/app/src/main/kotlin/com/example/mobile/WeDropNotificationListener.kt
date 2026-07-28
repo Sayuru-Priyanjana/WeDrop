@@ -3,6 +3,7 @@ package com.example.mobile
 import android.app.Notification
 import android.content.ComponentName
 import android.content.Context
+import android.graphics.Bitmap
 import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaController
@@ -10,6 +11,8 @@ import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import android.util.Base64
+import java.io.ByteArrayOutputStream
 
 /**
  * Reads notifications posted on this phone so the Dart side can mirror them to
@@ -141,6 +144,12 @@ class WeDropNotificationListener : NotificationListenerService() {
         MediaSessionHolder.current = null
     }
 
+    // Caches the last encoded artwork so it is only re-encoded when the track
+    // actually changes, not on every playback-state tick (position updates
+    // fire far more often than the track itself changes).
+    private var cachedArtworkKey: String? = null
+    private var cachedArtworkBase64: String = ""
+
     private fun emitMediaState() {
         val controller = activeController
         if (controller == null) {
@@ -166,8 +175,51 @@ class WeDropNotificationListener : NotificationListenerService() {
                 "position" to (playback?.position ?: -1L),
                 "duration" to if (durationRaw > 0) durationRaw else -1L,
                 "volume" to currentVolumePercent(),
+                "artwork" to artworkBase64(metadata, title, artist),
             ),
         )
+    }
+
+    /**
+     * Extracts the track's album art, downscaled and JPEG-compressed to a
+     * small preview (max 200px, quality 70) so it stays comfortably inside a
+     * single network frame and doesn't cost much to send on every track
+     * change. Re-encoding is skipped when the title/artist haven't changed
+     * since the last call, since [MediaController.Callback.onPlaybackStateChanged]
+     * fires far more often than the artwork actually changes.
+     */
+    private fun artworkBase64(metadata: MediaMetadata?, title: String, artist: String): String {
+        val key = "$title|$artist"
+        if (key == cachedArtworkKey) return cachedArtworkBase64
+
+        val bitmap: Bitmap? = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+            ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+
+        cachedArtworkKey = key
+        cachedArtworkBase64 = if (bitmap == null) {
+            ""
+        } else {
+            try {
+                val maxDim = 200
+                val scale = maxDim.toFloat() / maxOf(bitmap.width, bitmap.height, 1)
+                val scaled = if (scale < 1f) {
+                    Bitmap.createScaledBitmap(
+                        bitmap,
+                        (bitmap.width * scale).toInt().coerceAtLeast(1),
+                        (bitmap.height * scale).toInt().coerceAtLeast(1),
+                        true,
+                    )
+                } else {
+                    bitmap
+                }
+                val out = ByteArrayOutputStream()
+                scaled.compress(Bitmap.CompressFormat.JPEG, 70, out)
+                Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+            } catch (e: Exception) {
+                ""
+            }
+        }
+        return cachedArtworkBase64
     }
 
     private fun currentVolumePercent(): Int {

@@ -389,6 +389,10 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
           if (hasMedia) ...[
             Row(
               children: [
+                if (media.artwork.isNotEmpty) ...[
+                  ArtworkThumbnail(base64: media.artwork, size: 32, radius: 7),
+                  const SizedBox(width: 8),
+                ],
                 Expanded(
                   child: Text(
                     media.title.isEmpty ? 'Unknown track' : media.title,
@@ -1014,9 +1018,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
         const SizedBox(height: 20),
         const SectionHeader(
+          title: 'Advanced',
+          hint: 'Show extra detail like network, CPU and memory on a device\'s overview.',
+        ),
+        WdCard(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            children: [
+              SettingTile(
+                title: 'Show advanced device stats',
+                description: 'Adds network, CPU and memory to battery and sound.',
+                control: Switch(
+                  value: settings.showAdvancedFeatures,
+                  onChanged: (v) => _patch((s) => s.showAdvancedFeatures = v),
+                ),
+                last: true,
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 20),
+        const SectionHeader(
           title: 'Background',
-          hint: 'WeDrop always keeps a "connected devices" notification while it is '
-              'reachable — that is what keeps files, clipboard and notifications flowing.',
+          hint: 'WeDrop shows a "connected devices" notification while it is '
+              'reachable — that is what keeps files, clipboard and notifications flowing. '
+              'You can dismiss it any time; it reappears when the connection state changes.',
         ),
         WdCard(
           padding: const EdgeInsets.symmetric(horizontal: 16),

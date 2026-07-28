@@ -1,8 +1,52 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import 'theme.dart';
 
 /// Shared presentational widgets.
+
+/// A small, rounded album-art preview decoded from a base64 JPEG. Falls back
+/// to a generic note icon if the bytes ever fail to decode (a partial/corrupt
+/// transfer should never crash a screen).
+class ArtworkThumbnail extends StatelessWidget {
+  final String base64;
+  final double size;
+  final double radius;
+
+  const ArtworkThumbnail({super.key, required this.base64, this.size = 52, this.radius = 10});
+
+  @override
+  Widget build(BuildContext context) {
+    Uint8List? bytes;
+    try {
+      bytes = base64Decode(base64);
+    } catch (_) {
+      bytes = null;
+    }
+
+    final fallback = ColoredBox(
+      color: WeDropColors.surfaceHi,
+      child: Icon(Icons.music_note_rounded, color: WeDropColors.inkFaint, size: size * 0.45),
+    );
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: bytes == null
+            ? fallback
+            : Image.memory(
+                bytes,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stack) => fallback,
+              ),
+      ),
+    );
+  }
+}
 
 class WdCard extends StatelessWidget {
   final Widget child;
@@ -104,9 +148,6 @@ class StatusDot extends StatelessWidget {
       decoration: BoxDecoration(
         color: colour,
         shape: BoxShape.circle,
-        boxShadow: state == 'connected'
-            ? [BoxShadow(color: colour.withValues(alpha: 0.55), blurRadius: 8, spreadRadius: 1)]
-            : null,
       ),
     );
   }
@@ -271,30 +312,47 @@ class VerificationCodeDisplay extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: code.split('').map((digit) {
-            return Container(
-              width: 38,
-              height: 46,
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: WeDropColors.bgSoft,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: WeDropColors.borderHi),
-              ),
-              child: Text(
-                digit,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: WeDropColors.brandSoft,
-                  fontFeatures: [FontFeature.tabularFigures()],
-                ),
-              ),
+        Builder(
+          builder: (context) {
+            // Sized from the screen width rather than a LayoutBuilder: this
+            // widget is also used inside an AlertDialog, which measures its
+            // content with intrinsic-width sizing — LayoutBuilder cannot be
+            // used under intrinsic sizing (it throws at layout time), which
+            // silently broke the whole dialog and left only its dim barrier
+            // visible with no visible content at all.
+            final digits = code.split('');
+            final screenWidth = MediaQuery.sizeOf(context).width;
+            // A generous estimate of the chrome around this widget (dialog/
+            // overlay padding and margins) so the tiles fit comfortably
+            // without needing this widget's actual incoming constraints.
+            final available = screenWidth - 120;
+            final tileWidth = (available / digits.length).clamp(28.0, 38.0);
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: digits.map((digit) {
+                return Container(
+                  width: tileWidth,
+                  height: 46,
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: WeDropColors.bgSoft,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: WeDropColors.borderHi),
+                  ),
+                  child: Text(
+                    digit,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: WeDropColors.brandSoft,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                );
+              }).toList(),
             );
-          }).toList(),
+          },
         ),
         const SizedBox(height: 12),
         const Text(

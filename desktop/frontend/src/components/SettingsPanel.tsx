@@ -187,6 +187,27 @@ export function SettingsPanel({
       </div>
 
       <div>
+        <SectionTitle
+          title="Advanced"
+          hint="Show extra detail like network, CPU and memory on a device's card."
+        />
+        <Card className="px-6">
+          <SettingRow
+            title="Show advanced device stats"
+            description="Adds network, CPU and memory readings to battery and sound."
+            control={
+              <Toggle
+                checked={settings.show_advanced_features}
+                onChange={(v) => patch({ show_advanced_features: v })}
+                label="Show advanced device stats"
+              />
+            }
+            last
+          />
+        </Card>
+      </div>
+
+      <div>
         <SectionTitle title="Startup" />
         <Card className="px-6">
           <SettingRow
