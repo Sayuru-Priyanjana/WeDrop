@@ -62,6 +62,13 @@ type API interface {
 	// the peer merely advertised wanting it). A plugin whose feature has no
 	// per-device permission gate can simply not call this.
 	Allows(deviceID string) bool
+	// AllowsCapability is Allows generalised to an arbitrary capability
+	// string instead of this plugin's own ID. It exists for the rare case
+	// of one feature deliberately reusing another's permission toggle by
+	// product design (remote input reuses the media capability: "let this
+	// device control my media" also covers the touchpad/keyboard) — not a
+	// way for a plugin to guess at another plugin's internal state.
+	AllowsCapability(deviceID string, capability string) bool
 	// Emit raises a UI-facing event tagged with this plugin's ID.
 	Emit(name string, payload interface{})
 	// Settings returns this plugin's own settings, previously saved via

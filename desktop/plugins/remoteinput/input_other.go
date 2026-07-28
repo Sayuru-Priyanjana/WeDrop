@@ -1,6 +1,6 @@
 //go:build !windows
 
-package main
+package remoteinput
 
 import "wedrop/core/protocol"
 

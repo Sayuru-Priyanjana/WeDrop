@@ -32,6 +32,7 @@ import (
 	"desktop/plugins/health"
 	"desktop/plugins/media"
 	"desktop/plugins/notifications"
+	"desktop/plugins/remoteinput"
 )
 
 const (
@@ -70,13 +71,14 @@ type WeDropService struct {
 	transfers   map[string]*TransferView
 	pendingIn   map[string]chan bool
 
-	// Health, notifications, clipboard, and media each moved to their own
-	// plugin (desktop/plugins/*) — see s.registry.
-	registry     *plugin.Registry
-	healthPlugin *health.Plugin
-	notifsPlugin *notifications.Plugin
-	clipPlugin   *clipboard.Plugin
-	mediaPlugin  *media.Plugin
+	// Health, notifications, clipboard, media, and remote input each moved
+	// to their own plugin (desktop/plugins/*) — see s.registry.
+	registry       *plugin.Registry
+	healthPlugin   *health.Plugin
+	notifsPlugin   *notifications.Plugin
+	clipPlugin     *clipboard.Plugin
+	mediaPlugin    *media.Plugin
+	remoteinPlugin *remoteinput.Plugin
 
 	stopChan chan struct{}
 	stopOnce sync.Once
@@ -238,6 +240,10 @@ func (s *WeDropService) initCore() error {
 	s.mediaPlugin = media.New()
 	if err := s.registry.Register(s.mediaPlugin, true); err != nil {
 		return fmt.Errorf("register media plugin: %w", err)
+	}
+	s.remoteinPlugin = remoteinput.New()
+	if err := s.registry.Register(s.remoteinPlugin, true); err != nil {
+		return fmt.Errorf("register remote-input plugin: %w", err)
 	}
 
 	s.manager.OnSessionChange = func(deviceID string, connected bool) {
@@ -616,22 +622,12 @@ func (p *progressThrottle) should(done, total int64) bool {
 // and drag the whole transport package into the generated TypeScript models.
 type sessionHandler struct{ s *WeDropService }
 
-// OnMessage first offers the message to the plugin registry (features
-// already extracted into their own package — today, device-health and
-// notifications) and falls back to the not-yet-extracted feature switch
-// below. registry silently no-ops for a message type nothing has claimed,
-// so this ordering is always safe. Once every feature is extracted, the
-// switch disappears entirely.
+// OnMessage routes every feature message to whichever plugin claimed its
+// type (device-health, notifications, clipboard, media, remote input — see
+// s.registry) — every feature has now been extracted into its own plugin
+// package, so nothing is left to handle directly here.
 func (h sessionHandler) OnMessage(session *transport.Session, msgType protocol.MessageType, raw []byte) {
 	h.s.registry.OnMessage(plugin.PeerRef{DeviceID: session.DeviceID(), Info: session.PeerInfo()}, msgType, raw)
-
-	switch msgType {
-	case protocol.TypeRemoteInput:
-		var msg protocol.RemoteInput
-		if json.Unmarshal(raw, &msg) == nil {
-			h.s.onRemoteInput(session, msg)
-		}
-	}
 }
 
 func (h sessionHandler) OnDeviceInfo(session *transport.Session, info protocol.DeviceInfo) {
@@ -711,6 +707,9 @@ func (h pluginHost) LoadPluginSettings(id plugin.ID) []byte {
 	case media.ID:
 		data, _ := json.Marshal(media.Settings{AllowControl: settings.AllowMediaControl})
 		return data
+	case remoteinput.ID:
+		data, _ := json.Marshal(remoteinput.Settings{AllowControl: settings.AllowMediaControl})
+		return data
 	}
 	return nil
 }
@@ -719,19 +718,6 @@ func (h pluginHost) LoadPluginSettings(id plugin.ID) []byte {
 // still owned by storage.Settings and changed through UpdateSettings
 // (api.go), not through the plugin itself.
 func (h pluginHost) SavePluginSettings(id plugin.ID, data []byte) error { return nil }
-
-func (s *WeDropService) onRemoteInput(session *transport.Session, msg protocol.RemoteInput) {
-	// Remote control is gated by the same per-device media permission as the
-	// media keys — turning off "control my media" also disarms the touchpad and
-	// keyboard, so one switch covers "let this device drive me".
-	if !s.currentSettings().AllowMediaControl {
-		return
-	}
-	if !s.trust.Allows(session.DeviceID(), protocol.CapMedia) {
-		return
-	}
-	applyRemoteInput(msg)
-}
 
 func (s *WeDropService) onDeviceInfo(session *transport.Session, info protocol.DeviceInfo) {
 	// Keep the stored display name in step with what the peer calls itself.

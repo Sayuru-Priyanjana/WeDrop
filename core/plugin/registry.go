@@ -265,6 +265,10 @@ func (a *pluginAPI) Allows(deviceID string) bool {
 	return a.registry.host.Allows(deviceID, string(a.id))
 }
 
+func (a *pluginAPI) AllowsCapability(deviceID string, capability string) bool {
+	return a.registry.host.Allows(deviceID, capability)
+}
+
 func (a *pluginAPI) Emit(name string, payload interface{}) {
 	a.registry.host.Emit(Event{Plugin: a.id, Name: name, Payload: payload})
 }

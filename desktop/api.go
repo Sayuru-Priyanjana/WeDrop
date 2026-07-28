@@ -610,7 +610,7 @@ func (s *WeDropService) sendRemoteInput(deviceID string, input protocol.RemoteIn
 	if !s.trust.IsTrusted(deviceID) {
 		return fmt.Errorf("that device is not in your ecosystem")
 	}
-	return s.manager.SendTo(deviceID, input)
+	return s.remoteinPlugin.SendInput(deviceID, input)
 }
 
 // ---------------------------------------------------------------- notifications
