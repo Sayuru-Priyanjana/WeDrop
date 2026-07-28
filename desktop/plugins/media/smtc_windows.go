@@ -531,38 +531,6 @@ func trySeek(session *libnp.IGlobalSystemMediaTransportControlsSession, position
 	return waitAsyncOpByPolling((*asyncOpHandle)(opPtr), 5*time.Second)
 }
 
-// trySeekPlatform is the cross-platform entry point applyMediaCommand's
-// caller uses for a seek request; see media_other.go for the non-Windows stub.
-func trySeekPlatform(positionMs int64) error {
-	return seekCurrentSession(positionMs)
-}
-
-// seekCurrentSession finds whatever session Windows currently considers
-// active and seeks it. Used for a remote's seek command, which only ever
-// targets "the" session the remote is already looking at.
-func seekCurrentSession(positionMs int64) error {
-	ctx, cancel := context.WithTimeout(context.Background(), nowPlayingTimeout)
-	defer cancel()
-
-	session, err := getCurrentSMTCSession(ctx)
-	if err != nil {
-		return err
-	}
-	if session == nil {
-		return errors.New("nothing is currently playing")
-	}
-	defer session.Release()
-
-	ok, err := trySeek(session, positionMs)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return errors.New("the current player declined the seek")
-	}
-	return nil
-}
-
 // tryNoArgTransport calls one of the session's no-argument Try*Async
 // transport controls (play/pause/toggle/next/previous), all IAsyncOperation<bool>
 // like TryChangePlaybackPositionAsync, so the same IAsyncInfo-polling wait

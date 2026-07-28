@@ -56,8 +56,15 @@ class _MediaControllerScreenState extends State<MediaControllerScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(device != null ? '${device.name} · Media' : 'Media')),
       body: device == null || !device.connected
-          ? const Center(
-              child: Text('This device is not connected', style: TextStyle(color: WeDropColors.inkDim)),
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: EmptyState(
+                  icon: Icons.cloud_off_rounded,
+                  title: device == null ? 'This device is no longer paired' : '${device.name} is offline',
+                  hint: 'Media controls need an active connection.',
+                ),
+              ),
             )
           : ListView(
               padding: const EdgeInsets.all(16),

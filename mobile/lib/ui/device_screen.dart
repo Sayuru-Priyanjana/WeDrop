@@ -1007,7 +1007,7 @@ class _PresentTabState extends State<_PresentTab> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.point_of_sale_rounded, size: 40, color: WeDropColors.brandSoft),
+                            Icon(Icons.gps_fixed_rounded, size: 40, color: WeDropColors.brandSoft),
                             SizedBox(height: 12),
                             Text('Drag to move the laser pointer',
                                 style:
@@ -1088,10 +1088,10 @@ class _PresentTabState extends State<_PresentTab> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.point_of_sale_rounded,
+              Icon(Icons.gps_fixed_rounded,
                   size: 18, color: active ? WeDropColors.brandSoft : WeDropColors.inkDim),
               const SizedBox(height: 2),
-              Text(active ? 'Laser on' : 'Laser',
+              Text('Laser',
                   style: TextStyle(
                       fontSize: 11, color: active ? WeDropColors.brandSoft : WeDropColors.inkFaint)),
             ],

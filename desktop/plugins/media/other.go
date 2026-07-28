@@ -25,14 +25,6 @@ func applyMediaCommand(command string) error {
 	return fmt.Errorf("media control is not supported on %s", runtime.GOOS)
 }
 
-// trySeekPlatform is not implemented on this platform yet. playerctl does
-// support an absolute "position" command on Linux, but its exact semantics
-// were not verified against a running instance the way the Windows path was,
-// so this reports an honest "not supported" rather than shipping a guess.
-func trySeekPlatform(positionMs int64) error {
-	return fmt.Errorf("seeking is not supported on %s yet", runtime.GOOS)
-}
-
 // setVolumePlatform is not implemented on this platform yet.
 func setVolumePlatform(percent int) error {
 	return fmt.Errorf("setting an absolute volume is not supported on %s yet", runtime.GOOS)
