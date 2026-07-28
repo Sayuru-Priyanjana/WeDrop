@@ -9,7 +9,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/atotto/clipboard"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"wedrop/core/protocol"
@@ -44,7 +43,6 @@ func (s *WeDropService) GetState() AppState {
 		Paired:     []DeviceView{},
 		Discovered: []DeviceView{},
 		Transfers:  []TransferView{},
-		Clipboard:  s.clipHistory.Snapshot(),
 	}
 
 	if !ready {
@@ -62,6 +60,17 @@ func (s *WeDropService) GetState() AppState {
 			Body:       item.Body,
 			Time:       item.Time,
 			Read:       item.Read,
+		})
+	}
+
+	state.Clipboard = []ClipboardEntry{}
+	for _, item := range s.clipPlugin.Snapshot() {
+		state.Clipboard = append(state.Clipboard, ClipboardEntry{
+			Text:       item.Text,
+			Origin:     item.Origin,
+			OriginName: item.OriginName,
+			Time:       item.Time,
+			Incoming:   item.Incoming,
 		})
 	}
 
@@ -105,12 +114,10 @@ func (s *WeDropService) GetState() AppState {
 				view.Health = &hc
 				view.Battery = h.Battery
 			}
-			s.peerStateMu.RLock()
-			if m, ok := s.peerMedia[device.DeviceID]; ok && m.HasMedia {
+			if m, ok := s.mediaPlugin.StateOf(device.DeviceID); ok {
 				mc := m
 				view.Media = &mc
 			}
-			s.peerStateMu.RUnlock()
 		}
 		state.Paired = append(state.Paired, view)
 	}
@@ -509,57 +516,21 @@ func (s *WeDropService) PushClipboard() error {
 	if !s.isReady() {
 		return fmt.Errorf("WeDrop is still starting up")
 	}
-
-	text, err := clipboard.ReadAll()
-	if err != nil {
-		return fmt.Errorf("could not read the clipboard: %w", err)
+	if err := s.clipPlugin.PushNow(); err != nil {
+		return err
 	}
-	if text == "" {
-		return fmt.Errorf("the clipboard is empty")
-	}
-	if connected := s.manager.ConnectedDevices(); len(connected) == 0 {
-		return fmt.Errorf("no devices are connected right now")
-	}
-
-	s.clipMu.Lock()
-	s.clipSeq++
-	seq := s.clipSeq
-	s.lastClipHash = hashText(text)
-	s.clipMu.Unlock()
-
-	s.clipHistory.Push(ClipboardEntry{
-		Text:       text,
-		Origin:     s.identity.DeviceID,
-		OriginName: s.deviceName(),
-		Time:       nowMillis(),
-	})
-
-	s.manager.Broadcast(protocol.CapClipboard, protocol.ClipboardMessage{
-		Type:     protocol.TypeClipboard,
-		Text:     text,
-		Origin:   s.identity.DeviceID,
-		Sequence: seq,
-		Hash:     hashText(text),
-	})
-
 	s.pushState()
 	return nil
 }
 
 // CopyToClipboard puts a history entry back on the local clipboard.
 func (s *WeDropService) CopyToClipboard(text string) error {
-	if text == "" {
-		return nil
-	}
-	s.clipMu.Lock()
-	s.lastClipHash = hashText(text)
-	s.clipMu.Unlock()
-	return clipboard.WriteAll(text)
+	return s.clipPlugin.SetClipboard(text)
 }
 
 // ClearClipboardHistory empties the local history feed.
 func (s *WeDropService) ClearClipboardHistory() {
-	s.clipHistory.Clear()
+	s.clipPlugin.Clear()
 	s.pushState()
 }
 
@@ -567,26 +538,15 @@ func (s *WeDropService) ClearClipboardHistory() {
 
 // SendMediaCommand asks a paired device to act on its playback.
 func (s *WeDropService) SendMediaCommand(deviceID, command string) error {
-	switch command {
-	case protocol.MediaPlayPause, protocol.MediaNext, protocol.MediaPrev,
-		protocol.MediaStop, protocol.MediaVolUp, protocol.MediaVolDown, protocol.MediaMute:
-	default:
-		return fmt.Errorf("unknown media command %q", command)
-	}
-
 	if !s.trust.IsTrusted(deviceID) {
 		return fmt.Errorf("that device is not in your ecosystem")
 	}
-
-	return s.manager.SendTo(deviceID, protocol.MediaMessage{
-		Type:    protocol.TypeMedia,
-		Command: command,
-	})
+	return s.mediaPlugin.SendCommand(deviceID, command)
 }
 
 // ControlLocalMedia applies a media command to this machine.
 func (s *WeDropService) ControlLocalMedia(command string) error {
-	return applyMediaCommand(command)
+	return s.mediaPlugin.ControlLocal(command)
 }
 
 // ---------------------------------------------------------------- remote input

@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/atotto/clipboard"
 	"github.com/google/uuid"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -29,7 +28,9 @@ import (
 	"wedrop/core/transfer"
 	"wedrop/core/transport"
 
+	"desktop/plugins/clipboard"
 	"desktop/plugins/health"
+	"desktop/plugins/media"
 	"desktop/plugins/notifications"
 )
 
@@ -37,12 +38,6 @@ const (
 	settingsFile = "settings.json"
 	deviceFile   = "device.json"
 	masterKey    = "master.key"
-
-	// clipboardPoll is the interval at which the local clipboard is read.
-	// Windows offers no cheap change notification without a message loop, so
-	// this polls — but it only compares a hash and does nothing else when the
-	// clipboard is unchanged, which is the overwhelmingly common case.
-	clipboardPoll = 700 * time.Millisecond
 
 	// pairingTimeout is how long an inbound request waits for the user.
 	pairingTimeout = 90 * time.Second
@@ -75,20 +70,13 @@ type WeDropService struct {
 	transfers   map[string]*TransferView
 	pendingIn   map[string]chan bool
 
-	clipHistory  *ringBuffer[ClipboardEntry]
-	lastClipHash string
-	clipSeq      int64
-	clipMu       sync.Mutex
-
-	// Latest media state received from each peer, keyed by device ID. Health
-	// and notifications moved to their own plugins (desktop/plugins/*) — see
-	// s.registry.
-	peerStateMu sync.RWMutex
-	peerMedia   map[string]protocol.MediaState
-
+	// Health, notifications, clipboard, and media each moved to their own
+	// plugin (desktop/plugins/*) — see s.registry.
 	registry     *plugin.Registry
 	healthPlugin *health.Plugin
 	notifsPlugin *notifications.Plugin
+	clipPlugin   *clipboard.Plugin
+	mediaPlugin  *media.Plugin
 
 	stopChan chan struct{}
 	stopOnce sync.Once
@@ -101,12 +89,10 @@ type WeDropService struct {
 // NewWeDropService constructs the service; no I/O happens until startup.
 func NewWeDropService() *WeDropService {
 	return &WeDropService{
-		transfers:   make(map[string]*TransferView),
-		pendingIn:   make(map[string]chan bool),
-		clipHistory: newRingBuffer[ClipboardEntry](50),
-		peerMedia:   make(map[string]protocol.MediaState),
-		stopChan:    make(chan struct{}),
-		settings:    storage.DefaultSettings(),
+		transfers: make(map[string]*TransferView),
+		pendingIn: make(map[string]chan bool),
+		stopChan:  make(chan struct{}),
+		settings:  storage.DefaultSettings(),
 	}
 }
 
@@ -245,6 +231,14 @@ func (s *WeDropService) initCore() error {
 	if err := s.registry.Register(s.notifsPlugin, true); err != nil {
 		return fmt.Errorf("register notifications plugin: %w", err)
 	}
+	s.clipPlugin = clipboard.New(s.identity.DeviceID, s.deviceName, s.peerName)
+	if err := s.registry.Register(s.clipPlugin, true); err != nil {
+		return fmt.Errorf("register clipboard plugin: %w", err)
+	}
+	s.mediaPlugin = media.New()
+	if err := s.registry.Register(s.mediaPlugin, true); err != nil {
+		return fmt.Errorf("register media plugin: %w", err)
+	}
 
 	s.manager.OnSessionChange = func(deviceID string, connected bool) {
 		if connected {
@@ -277,42 +271,7 @@ func (s *WeDropService) initCore() error {
 	if err := s.registry.StartAll(s.ctx); err != nil {
 		return fmt.Errorf("start plugins: %w", err)
 	}
-
-	go s.clipboardWatcher()
-	go s.nowPlayingBroadcaster()
 	return nil
-}
-
-// nowPlayingBroadcaster periodically shares what this device is playing, so a
-// paired phone can show and control it. On platforms without an implementation
-// (see media_now_playing_other.go), nowPlayingInterval is zero and this exits
-// immediately rather than spinning on a zero-duration ticker.
-func (s *WeDropService) nowPlayingBroadcaster() {
-	if nowPlayingInterval <= 0 {
-		return
-	}
-
-	ticker := time.NewTicker(nowPlayingInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-s.stopChan:
-			return
-		case <-ticker.C:
-			s.broadcastNowPlaying()
-		}
-	}
-}
-
-func (s *WeDropService) broadcastNowPlaying() {
-	if !s.currentSettings().AllowMediaControl {
-		return
-	}
-	if len(s.manager.ConnectedDevices()) == 0 {
-		return
-	}
-	s.manager.Broadcast(protocol.CapMedia, collectNowPlaying())
 }
 
 func (s *WeDropService) loadIdentity() error {
@@ -649,70 +608,6 @@ func (p *progressThrottle) should(done, total int64) bool {
 	return true
 }
 
-// ---------------------------------------------------------------- clipboard
-
-func (s *WeDropService) clipboardWatcher() {
-	ticker := time.NewTicker(clipboardPoll)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-s.stopChan:
-			return
-		case <-ticker.C:
-			s.checkClipboard()
-		}
-	}
-}
-
-func (s *WeDropService) checkClipboard() {
-	settings := s.currentSettings()
-	if !settings.AutoSyncClipboard {
-		return
-	}
-	// Nothing to broadcast to, so do not even touch the clipboard.
-	if len(s.manager.ConnectedDevices()) == 0 {
-		return
-	}
-
-	text, err := clipboard.ReadAll()
-	if err != nil || text == "" {
-		return
-	}
-	if len(text) > settings.ClipboardMaxChars {
-		return
-	}
-
-	hash := crypto.HashBytes([]byte(text))
-
-	s.clipMu.Lock()
-	if hash == s.lastClipHash {
-		s.clipMu.Unlock()
-		return
-	}
-	s.lastClipHash = hash
-	s.clipSeq++
-	seq := s.clipSeq
-	s.clipMu.Unlock()
-
-	s.clipHistory.Push(ClipboardEntry{
-		Text:       text,
-		Origin:     s.identity.DeviceID,
-		OriginName: s.deviceName(),
-		Time:       nowMillis(),
-		Incoming:   false,
-	})
-
-	s.manager.Broadcast(protocol.CapClipboard, protocol.ClipboardMessage{
-		Type:     protocol.TypeClipboard,
-		Text:     text,
-		Origin:   s.identity.DeviceID,
-		Sequence: seq,
-		Hash:     hash,
-	})
-	s.pushState()
-}
-
 // ---------------------------------------------- transport.SessionHandler
 
 // sessionHandler keeps the session callbacks off WeDropService itself. Wails
@@ -731,21 +626,6 @@ func (h sessionHandler) OnMessage(session *transport.Session, msgType protocol.M
 	h.s.registry.OnMessage(plugin.PeerRef{DeviceID: session.DeviceID(), Info: session.PeerInfo()}, msgType, raw)
 
 	switch msgType {
-	case protocol.TypeClipboard:
-		var msg protocol.ClipboardMessage
-		if json.Unmarshal(raw, &msg) == nil {
-			h.s.onClipboard(session, msg)
-		}
-	case protocol.TypeMedia:
-		var msg protocol.MediaMessage
-		if json.Unmarshal(raw, &msg) == nil {
-			h.s.onMedia(session, msg)
-		}
-	case protocol.TypeMediaState:
-		var msg protocol.MediaState
-		if json.Unmarshal(raw, &msg) == nil {
-			h.s.onMediaState(session, msg)
-		}
 	case protocol.TypeRemoteInput:
 		var msg protocol.RemoteInput
 		if json.Unmarshal(raw, &msg) == nil {
@@ -821,6 +701,16 @@ func (h pluginHost) LoadPluginSettings(id plugin.ID) []byte {
 	case notifications.ID:
 		data, _ := json.Marshal(notifications.Settings{Receive: settings.ReceiveNotifications})
 		return data
+	case clipboard.ID:
+		data, _ := json.Marshal(clipboard.Settings{
+			AutoSync: settings.AutoSyncClipboard,
+			Receive:  settings.ReceiveClipboard,
+			MaxChars: settings.ClipboardMaxChars,
+		})
+		return data
+	case media.ID:
+		data, _ := json.Marshal(media.Settings{AllowControl: settings.AllowMediaControl})
+		return data
 	}
 	return nil
 }
@@ -829,91 +719,6 @@ func (h pluginHost) LoadPluginSettings(id plugin.ID) []byte {
 // still owned by storage.Settings and changed through UpdateSettings
 // (api.go), not through the plugin itself.
 func (h pluginHost) SavePluginSettings(id plugin.ID, data []byte) error { return nil }
-
-func (s *WeDropService) onClipboard(session *transport.Session, msg protocol.ClipboardMessage) {
-	settings := s.currentSettings()
-	if !settings.ReceiveClipboard {
-		return
-	}
-	if !s.trust.Allows(session.DeviceID(), protocol.CapClipboard) {
-		return
-	}
-	if msg.Text == "" || len(msg.Text) > settings.ClipboardMaxChars {
-		return
-	}
-
-	hash := msg.Hash
-	if hash == "" {
-		hash = crypto.HashBytes([]byte(msg.Text))
-	}
-
-	// Record the hash before writing, so our own watcher does not see the text
-	// we just pasted in as a fresh local copy and bounce it back around the
-	// ecosystem forever.
-	s.clipMu.Lock()
-	if hash == s.lastClipHash {
-		s.clipMu.Unlock()
-		return
-	}
-	s.lastClipHash = hash
-	s.clipMu.Unlock()
-
-	if err := clipboard.WriteAll(msg.Text); err != nil {
-		log.Printf("wedrop: could not write to the clipboard: %v", err)
-		return
-	}
-
-	name := s.peerName(session.DeviceID(), session.PeerInfo().Name)
-	s.clipHistory.Push(ClipboardEntry{
-		Text:       msg.Text,
-		Origin:     session.DeviceID(),
-		OriginName: name,
-		Time:       nowMillis(),
-		Incoming:   true,
-	})
-	s.emit("clipboard:received", name)
-	s.pushState()
-}
-
-func (s *WeDropService) onMedia(session *transport.Session, msg protocol.MediaMessage) {
-	if !s.currentSettings().AllowMediaControl {
-		return
-	}
-	if !s.trust.Allows(session.DeviceID(), protocol.CapMedia) {
-		return
-	}
-
-	if msg.Command == protocol.MediaSeek {
-		if err := trySeekPlatform(msg.Position); err != nil {
-			log.Printf("wedrop: seek to %dms failed: %v", msg.Position, err)
-			return
-		}
-		s.emit("media:applied", msg.Command)
-		return
-	}
-
-	if msg.Command == protocol.MediaSetVolume {
-		if err := setVolumePlatform(msg.Volume); err != nil {
-			log.Printf("wedrop: set volume to %d%% failed: %v", msg.Volume, err)
-			return
-		}
-		s.emit("media:applied", msg.Command)
-		return
-	}
-
-	if err := applyMediaCommand(msg.Command); err != nil {
-		log.Printf("wedrop: media command %q failed: %v", msg.Command, err)
-		return
-	}
-	s.emit("media:applied", msg.Command)
-}
-
-func (s *WeDropService) onMediaState(session *transport.Session, msg protocol.MediaState) {
-	s.peerStateMu.Lock()
-	s.peerMedia[session.DeviceID()] = msg
-	s.peerStateMu.Unlock()
-	s.pushState()
-}
 
 func (s *WeDropService) onRemoteInput(session *transport.Session, msg protocol.RemoteInput) {
 	// Remote control is gated by the same per-device media permission as the

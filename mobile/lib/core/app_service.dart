@@ -2,11 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
-import 'crypto/identity.dart';
 import 'discovery/discovery_service.dart';
 import 'platform/native_bridge.dart';
 import 'plugin/plugin.dart';
@@ -18,7 +16,9 @@ import 'transport/connection_manager.dart';
 import 'transport/framing.dart';
 import 'transport/handshake.dart';
 import 'transport/session.dart';
+import '../plugins/clipboard/clipboard_plugin.dart';
 import '../plugins/health/health_plugin.dart';
+import '../plugins/media/media_plugin.dart';
 import '../plugins/notifications/notifications_plugin.dart';
 
 /// A device as the UI sees it: trust store, discovery and session state merged.
@@ -85,20 +85,6 @@ class TransferView {
   }) : startedAt = startedAt ?? DateTime.now().millisecondsSinceEpoch;
 }
 
-class ClipboardEntry {
-  final String text;
-  final String originName;
-  final bool incoming;
-  final int time;
-
-  ClipboardEntry({
-    required this.text,
-    required this.originName,
-    required this.incoming,
-    int? time,
-  }) : time = time ?? DateTime.now().millisecondsSinceEpoch;
-}
-
 /// An inbound pairing request awaiting the user's decision.
 class PairingPrompt {
   final PairingRequest request;
@@ -120,7 +106,6 @@ class IncomingFilePrompt {
 /// the network stack directly.
 class AppService extends ChangeNotifier implements PeerAuthorizer {
   static const _uuid = Uuid();
-  static const _clipboardPoll = Duration(seconds: 2);
 
   late WeDropStore _store;
   late DiscoveryService _discovery;
@@ -128,6 +113,8 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   late PluginRegistry _plugins;
   late HealthPlugin _healthPlugin;
   late NotificationsPlugin _notifsPlugin;
+  late ClipboardPlugin _clipPlugin;
+  late MediaPlugin _mediaPlugin;
 
   /// True once the network stack is fully constructed. Guards the late fields
   /// above so a startup that fails partway — or a test host with no platform
@@ -139,16 +126,14 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   String downloadDir = '';
 
   final List<TransferView> transfers = [];
-  final List<ClipboardEntry> clipboardHistory = [];
 
   /// The notifications feed — owned by _notifsPlugin; exposed here so the UI
   /// keeps reading it off AppService like everything else.
   List<NotificationEntry> get notifications => _notifsPlugin.items;
 
-  /// Latest media state received from each peer, keyed by device ID. Health
-  /// moved to the health plugin (plugins/health) — see _healthPlugin.
-  final Map<String, MediaState> peerMedia = {};
-  final Map<String, DateTime> _peerMediaReceivedAt = {};
+  /// The clipboard history feed — owned by _clipPlugin; exposed here so the
+  /// UI keeps reading it off AppService like everything else.
+  List<ClipboardEntry> get clipboardHistory => _clipPlugin.items;
 
   PairingPrompt? pairingPrompt;
   IncomingFilePrompt? incomingFilePrompt;
@@ -160,11 +145,8 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   final _toastController = StreamController<String>.broadcast();
   Stream<String> get toasts => _toastController.stream;
 
-  Timer? _clipboardTimer;
   Timer? _mediaTicker;
   StreamSubscription? _nativeEvents;
-  String _lastClipboardHash = '';
-  int _clipboardSeq = 0;
   bool _notificationAccess = false;
 
   // -------------------------------------------------------------- getters
@@ -266,11 +248,9 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
               _plugins.onPeerConnected(PeerRef(deviceId, session.peerInfo));
             }
           } else {
+            // Media's onPeerDisconnected stops showing "now playing" for a
+            // device that just dropped.
             _plugins.onPeerDisconnected(deviceId);
-            if (peerMedia.remove(deviceId) != null) {
-              // Stop showing "now playing" for a device that just dropped.
-              NativeBridge.clearMediaNotification();
-            }
           }
           // Connections changing is exactly what the ongoing "connected
           // devices" notification exists to reflect.
@@ -287,6 +267,16 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
         generateId: () => _uuid.v4(),
       );
       _plugins.register(_notifsPlugin);
+      _clipPlugin = ClipboardPlugin(
+        deviceId: deviceId,
+        deviceName: () => deviceName,
+        resolveName: (deviceId, fallback) => _store.trusted(deviceId)?.name ?? fallback,
+      );
+      _plugins.register(_clipPlugin);
+      _mediaPlugin = MediaPlugin(
+        resolveName: (deviceId, fallback) => _store.trusted(deviceId)?.name ?? fallback,
+      );
+      _plugins.register(_mediaPlugin);
 
       final port = await _manager.start();
       // The network stack is now safe to touch and tear down.
@@ -307,7 +297,6 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
 
       if (settings.discoverable) await _discovery.start();
 
-      _startClipboardWatcher();
       await _plugins.startAll();
       _startMediaTicker();
       await _wireNativeBridge();
@@ -395,41 +384,9 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
         break;
 
       case 'media_state_local':
-        _broadcastLocalMediaState(event);
+        _mediaPlugin.broadcastLocalState(event);
         break;
     }
-  }
-
-  /// Shares this phone's own now-playing state with the ecosystem, forwarded
-  /// up from Android's MediaSessionManager whenever it changes.
-  void _broadcastLocalMediaState(Map<String, dynamic> event) {
-    if (!settings.allowMediaControl) return;
-    if (_manager.connectedDevices.isEmpty) return;
-
-    final state = MediaState(
-      hasMedia: event['has_media'] as bool? ?? false,
-      playing: event['playing'] as bool? ?? false,
-      title: event['title'] as String? ?? '',
-      artist: event['artist'] as String? ?? '',
-      app: event['app'] as String? ?? '',
-      position: event['position'] as int? ?? -1,
-      duration: event['duration'] as int? ?? -1,
-      volume: event['volume'] as int? ?? -1,
-      artwork: event['artwork'] as String? ?? '',
-    );
-
-    _manager.broadcast(Capability.media, {
-      'type': MsgType.mediaState,
-      'playing': state.playing,
-      'has_media': state.hasMedia,
-      'title': state.title,
-      'artist': state.artist,
-      'app': state.app,
-      'volume': state.volume,
-      'position': state.position,
-      'duration': state.duration,
-      'artwork': state.artwork,
-    });
   }
 
   /// Handles a tap on the media or "Send clipboard" notification action
@@ -476,133 +433,21 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   /// actually extracted into its own plugin, this switch keeps behaving
   /// exactly as before. Later steps replace each case with a plugin lookup.
   void _onMessage(Session session, String msgType, Map<String, dynamic> raw) {
-    // Offer it to the plugin registry first (features already extracted —
-    // today, device-health); it silently no-ops for anything unclaimed.
+    // Every feature message type is now handled by a registered plugin
+    // (device-health, notifications, clipboard, media); this just offers it
+    // to the registry, which silently no-ops for anything unclaimed.
     _plugins.onMessage(session, msgType, raw);
-
-    switch (msgType) {
-      case MsgType.clipboard:
-        _onClipboard(session, ClipboardMessage.fromJson(raw));
-        break;
-      case MsgType.media:
-        final command = raw['command'] as String?;
-        if (command != null) {
-          _onMedia(session, command, raw['position'] as int?, raw['volume'] as int?);
-        }
-        break;
-      case MsgType.mediaState:
-        _onMediaState(session, MediaState.fromJson(raw));
-        break;
-    }
-  }
-
-  void _onClipboard(Session session, ClipboardMessage message) async {
-    if (!settings.receiveClipboard) return;
-    if (!_store.allows(session.deviceId, Capability.clipboard)) return;
-    if (message.text.isEmpty || message.text.length > settings.clipboardMaxChars) return;
-
-    final hash =
-        message.hash.isNotEmpty ? message.hash : await sha256Hex(message.text.codeUnits);
-
-    if (hash == _lastClipboardHash) return;
-
-    await Clipboard.setData(ClipboardData(text: message.text));
-
-    // Read back what Android actually stored rather than trusting the hash of
-    // what we sent it — this is the fix for a real bounce-back bug: Android's
-    // clipboard can return the text back slightly changed (it stores more than
-    // one representation of a clip, and some keyboards/clipboard managers
-    // normalise it further), so hashing the original message text left a gap
-    // where the periodic watcher would see a "different" clipboard a moment
-    // later and re-broadcast it — on a 3+ device ecosystem this cascades into
-    // exactly the frequent, spurious resending that was reported. Hashing
-    // whatever the OS reports back closes that gap regardless of what it does
-    // to the content.
-    final readBack = await Clipboard.getData(Clipboard.kTextPlain);
-    _lastClipboardHash = readBack?.text != null ? await sha256Hex(readBack!.text!.codeUnits) : hash;
-
-    final name = _store.trusted(session.deviceId)?.name ?? session.peerInfo.name;
-    _pushClipboardEntry(ClipboardEntry(text: message.text, originName: name, incoming: true));
-    _toastController.add('Clipboard from $name');
-    notifyListeners();
-  }
-
-  void _onMedia(Session session, String command, int? position, int? volume) {
-    if (!settings.allowMediaControl) return;
-    if (!_store.allows(session.deviceId, Capability.media)) return;
-
-    if (command == MediaCommand.seek && position != null) {
-      NativeBridge.seekMedia(position);
-    } else if (command == MediaCommand.setVolume && volume != null) {
-      NativeBridge.setSystemVolume(volume);
-    } else {
-      NativeBridge.applyMediaCommand(command);
-    }
-  }
-
-  void _onMediaState(Session session, MediaState state) {
-    peerMedia[session.deviceId] = state;
-    _peerMediaReceivedAt[session.deviceId] = DateTime.now();
-
-    final name = _store.trusted(session.deviceId)?.name ?? session.peerInfo.name;
-    if (state.hasMedia) {
-      NativeBridge.updateMediaNotification(
-        deviceId: session.deviceId,
-        deviceName: name,
-        appName: state.app,
-        title: state.title,
-        artist: state.artist,
-        playing: state.playing,
-        position: state.position,
-        duration: state.duration,
-        volume: state.volume,
-        artwork: state.artwork,
-      );
-    } else {
-      NativeBridge.clearMediaNotification();
-    }
-    notifyListeners();
   }
 
   /// The latest health reported by a peer, or null if none yet.
   DeviceHealth? healthOf(String deviceId) => _healthPlugin.healthOf(deviceId);
 
   /// The latest media state reported by a peer, or null if none yet.
-  MediaState? mediaOf(String deviceId) => peerMedia[deviceId];
+  MediaState? mediaOf(String deviceId) => _mediaPlugin.mediaOf(deviceId);
 
-  /// The peer's playback position interpolated forward to "now".
-  ///
-  /// A peer only sends a fresh [MediaState] on an actual player event (track
-  /// change, play/pause, a seek) — not once a second — so rendering the raw
-  /// stored value verbatim leaves every progress bar frozen between those
-  /// events instead of visibly advancing like real playback. This estimates
-  /// "where the track actually is right now" from the last known position,
-  /// how long ago that arrived, and whether it was playing, so every surface
-  /// (home card, remote screen, notification) can show a smoothly moving
-  /// preview without needing the peer to spam updates every second.
-  MediaState? interpolatedMediaOf(String deviceId) {
-    final state = peerMedia[deviceId];
-    if (state == null || !state.hasMedia) return state;
-    if (!state.playing || state.position < 0 || state.duration <= 0) return state;
-
-    final receivedAt = _peerMediaReceivedAt[deviceId];
-    if (receivedAt == null) return state;
-
-    final elapsedMillis = DateTime.now().difference(receivedAt).inMilliseconds;
-    final estimatedPosition = (state.position + elapsedMillis).clamp(0, state.duration).toInt();
-    if (estimatedPosition == state.position) return state;
-
-    return MediaState(
-      playing: state.playing,
-      hasMedia: state.hasMedia,
-      title: state.title,
-      artist: state.artist,
-      app: state.app,
-      volume: state.volume,
-      position: estimatedPosition,
-      duration: state.duration,
-    );
-  }
+  /// The peer's playback position interpolated forward to "now" — see
+  /// MediaPlugin.interpolatedMediaOf for why this is needed.
+  MediaState? interpolatedMediaOf(String deviceId) => _mediaPlugin.interpolatedMediaOf(deviceId);
 
   /// Sends one remote-input event to a device, if it is connected.
   Future<void> sendRemoteInput(String deviceId, RemoteInput input) async {
@@ -928,20 +773,11 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
 
   /// Sends the current clipboard to the ecosystem immediately.
   Future<void> pushClipboard() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final text = data?.text ?? '';
-    if (text.isEmpty) throw Exception('the clipboard is empty');
-    if (_manager.connectedDevices.isEmpty) {
-      throw Exception('no devices are connected right now');
-    }
-    await _broadcastClipboard(text);
+    await _clipPlugin.pushNow();
     _toastController.add('Clipboard sent');
   }
 
-  Future<void> copyToClipboard(String text) async {
-    _lastClipboardHash = await sha256Hex(text.codeUnits);
-    await Clipboard.setData(ClipboardData(text: text));
-  }
+  Future<void> copyToClipboard(String text) => _clipPlugin.setClipboard(text);
 
   /// Called when WeDrop returns to the foreground: resyncs the clipboard and
   /// kicks every trusted peer to reconnect immediately.
@@ -963,7 +799,7 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     // trails the resume event by a moment on some Android versions; without a
     // short settle the read can still return the previous value.
     await Future<void>.delayed(const Duration(milliseconds: 300));
-    await _checkClipboard();
+    await _clipPlugin.checkNow();
   }
 
   /// Sends a media command to a peer.
@@ -979,10 +815,7 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     int? volume,
   }) async {
     try {
-      await _manager.sendTo(
-        targetDeviceId,
-        mediaMessage(command, position: position, volume: volume),
-      );
+      await _mediaPlugin.sendCommand(targetDeviceId, command, position: position, volume: volume);
     } catch (error) {
       final name = _store.trusted(targetDeviceId)?.name ?? 'that device';
       _toastController.add('Could not reach $name: $error');
@@ -1040,7 +873,7 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   }
 
   void clearClipboardHistory() {
-    clipboardHistory.clear();
+    _clipPlugin.clear();
     notifyListeners();
   }
 
@@ -1051,10 +884,6 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
 
   // ------------------------------------------------------------- internals
 
-  void _startClipboardWatcher() {
-    _clipboardTimer = Timer.periodic(_clipboardPoll, (_) => _checkClipboard());
-  }
-
   /// Wakes the UI once a second while any known peer is actively playing with
   /// a known duration, so [interpolatedMediaOf] has a reason to be re-read and
   /// progress bars visibly move. It is a no-op — no timer work, no rebuilds —
@@ -1062,52 +891,8 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   /// Windows that cannot report a duration to interpolate against).
   void _startMediaTicker() {
     _mediaTicker = Timer.periodic(const Duration(seconds: 1), (_) {
-      final anyAnimating =
-          peerMedia.values.any((m) => m.hasMedia && m.playing && m.duration > 0);
-      if (anyAnimating) notifyListeners();
+      if (_mediaPlugin.anyAnimating()) notifyListeners();
     });
-  }
-
-  Future<void> _checkClipboard() async {
-    if (!settings.autoSyncClipboard) return;
-    // Nothing to broadcast to, so do not even read the clipboard — on Android
-    // that read is a cross-process call and shows a toast on some versions.
-    if (_manager.connectedDevices.isEmpty) return;
-
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final text = data?.text ?? '';
-    if (text.isEmpty || text.length > settings.clipboardMaxChars) return;
-
-    final hash = await sha256Hex(text.codeUnits);
-    if (hash == _lastClipboardHash) return;
-    _lastClipboardHash = hash;
-
-    await _broadcastClipboard(text, hash: hash);
-  }
-
-  Future<void> _broadcastClipboard(String text, {String? hash}) async {
-    final digest = hash ?? await sha256Hex(text.codeUnits);
-    _lastClipboardHash = digest;
-
-    _pushClipboardEntry(
-      ClipboardEntry(text: text, originName: deviceName, incoming: false),
-    );
-
-    await _manager.broadcast(
-      Capability.clipboard,
-      ClipboardMessage(
-        text: text,
-        origin: deviceId,
-        sequence: ++_clipboardSeq,
-        hash: digest,
-      ).toJson(),
-    );
-    notifyListeners();
-  }
-
-  void _pushClipboardEntry(ClipboardEntry entry) {
-    clipboardHistory.insert(0, entry);
-    if (clipboardHistory.length > 50) clipboardHistory.removeLast();
   }
 
   void _pushTransfer(TransferView view) {
@@ -1137,7 +922,6 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
 
   @override
   void dispose() {
-    _clipboardTimer?.cancel();
     _mediaTicker?.cancel();
     _nativeEvents?.cancel();
     // Only tear down the network stack if it actually came up; a startup that
@@ -1187,7 +971,15 @@ class _PluginHost implements PluginHost {
   bool allows(String deviceId, String capability) => _service._store.allows(deviceId, capability);
 
   @override
-  void emit(PluginEvent event) => _service._notifyPlugins();
+  void emit(PluginEvent event) {
+    // Clipboard's "received" event carries the sender's display name and
+    // used to always surface a toast — the one plugin event with a specific
+    // UI side effect beyond a rebuild.
+    if (event.plugin == Capability.clipboard && event.name == 'received') {
+      _service._toastController.add('Clipboard from ${event.payload}');
+    }
+    _service._notifyPlugins();
+  }
 
   // Bridges each plugin's own settings shape from the existing shared
   // Settings object, until the settings/capability de-hardcoding migration
@@ -1202,6 +994,14 @@ class _PluginHost implements PluginHost {
           'receive': _service.settings.receiveNotifications,
           'share': _service.settings.shareNotifications,
         };
+      case Capability.clipboard:
+        return {
+          'auto_sync': _service.settings.autoSyncClipboard,
+          'receive': _service.settings.receiveClipboard,
+          'max_chars': _service.settings.clipboardMaxChars,
+        };
+      case Capability.media:
+        return {'allow_control': _service.settings.allowMediaControl};
     }
     return const {};
   }

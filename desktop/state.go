@@ -1,7 +1,6 @@
 package main
 
 import (
-	"sync"
 	"time"
 
 	"wedrop/core/protocol"
@@ -109,57 +108,6 @@ type AppState struct {
 	Notifs     []NotificationView `json:"notifications"`
 	Pairing    *PairingPrompt     `json:"pairing"`
 	ListenPort int                `json:"listen_port"`
-}
-
-// ringBuffer keeps the most recent N items of a feed without growing forever.
-// The clipboard and notification feeds are append-only from the user's point of
-// view, and an app expected to run for weeks in the background cannot hold
-// every item it ever saw.
-type ringBuffer[T any] struct {
-	mu    sync.Mutex
-	items []T
-	limit int
-}
-
-func newRingBuffer[T any](limit int) *ringBuffer[T] {
-	return &ringBuffer[T]{limit: limit, items: make([]T, 0, limit)}
-}
-
-// Push adds an item to the front, dropping the oldest if the buffer is full.
-func (r *ringBuffer[T]) Push(item T) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	r.items = append([]T{item}, r.items...)
-	if len(r.items) > r.limit {
-		r.items = r.items[:r.limit]
-	}
-}
-
-// Snapshot returns a copy of the current contents, newest first.
-func (r *ringBuffer[T]) Snapshot() []T {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	out := make([]T, len(r.items))
-	copy(out, r.items)
-	return out
-}
-
-// Clear empties the buffer.
-func (r *ringBuffer[T]) Clear() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.items = r.items[:0]
-}
-
-// Update applies fn to every item, keeping those fn returns true for.
-func (r *ringBuffer[T]) Update(fn func(*T)) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for i := range r.items {
-		fn(&r.items[i])
-	}
 }
 
 func nowMillis() int64 { return time.Now().UnixMilli() }

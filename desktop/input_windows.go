@@ -6,13 +6,20 @@ import (
 	"strings"
 	"unsafe"
 
+	"golang.org/x/sys/windows"
+
 	"wedrop/core/protocol"
 )
 
 // Remote input injection via SendInput. This is what makes a phone a mouse and
 // keyboard for the desktop: each RemoteInput message becomes a synthetic input
-// event the OS delivers to whatever window has focus. user32 is declared in
-// media_windows.go.
+// event the OS delivers to whatever window has focus.
+//
+// user32 used to be declared once in media_windows.go and shared across
+// package main by both features; now that media has moved to its own plugin
+// package (desktop/plugins/media), remote input (not yet extracted — see the
+// plugin architecture refactor plan) needs its own handle to user32.dll.
+var user32 = windows.NewLazySystemDLL("user32.dll")
 
 var procSendInput = user32.NewProc("SendInput")
 

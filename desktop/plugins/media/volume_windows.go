@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package media
 
 // Real system volume via WASAPI's IAudioEndpointVolume — classic, fully
 // synchronous COM (no async completion callbacks, no WinRT parameterized

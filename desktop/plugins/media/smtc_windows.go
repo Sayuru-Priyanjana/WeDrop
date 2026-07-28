@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package media
 
 // This file reaches two System Media Transport Controls (SMTC) interfaces
 // that github.com/delthas/go-libnp exposes the activation/vtable machinery

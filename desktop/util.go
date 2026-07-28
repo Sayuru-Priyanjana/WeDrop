@@ -12,10 +12,6 @@ func unmarshalJSON(data []byte, v interface{}) error {
 	return json.Unmarshal(data, v)
 }
 
-func hashText(text string) string {
-	return crypto.HashBytes([]byte(text))
-}
-
 func statSize(path string) (int64, error) {
 	info, err := os.Stat(path)
 	if err != nil {
