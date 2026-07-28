@@ -30,6 +30,7 @@ import (
 	"wedrop/core/transport"
 
 	"desktop/plugins/health"
+	"desktop/plugins/notifications"
 )
 
 const (
@@ -75,25 +76,26 @@ type WeDropService struct {
 	pendingIn   map[string]chan bool
 
 	clipHistory  *ringBuffer[ClipboardEntry]
-	notifs       *ringBuffer[NotificationView]
 	lastClipHash string
 	clipSeq      int64
 	clipMu       sync.Mutex
 
 	// Latest media state received from each peer, keyed by device ID. Health
-	// moved to the health plugin (desktop/plugins/health) — see s.registry.
+	// and notifications moved to their own plugins (desktop/plugins/*) — see
+	// s.registry.
 	peerStateMu sync.RWMutex
 	peerMedia   map[string]protocol.MediaState
 
 	registry     *plugin.Registry
 	healthPlugin *health.Plugin
+	notifsPlugin *notifications.Plugin
 
 	stopChan chan struct{}
 	stopOnce sync.Once
 
-	emitMu       sync.Mutex
-	emitPending  bool
-	lastEmitted  time.Time
+	emitMu      sync.Mutex
+	emitPending bool
+	lastEmitted time.Time
 }
 
 // NewWeDropService constructs the service; no I/O happens until startup.
@@ -102,7 +104,6 @@ func NewWeDropService() *WeDropService {
 		transfers:   make(map[string]*TransferView),
 		pendingIn:   make(map[string]chan bool),
 		clipHistory: newRingBuffer[ClipboardEntry](50),
-		notifs:      newRingBuffer[NotificationView](100),
 		peerMedia:   make(map[string]protocol.MediaState),
 		stopChan:    make(chan struct{}),
 		settings:    storage.DefaultSettings(),
@@ -239,6 +240,10 @@ func (s *WeDropService) initCore() error {
 	s.healthPlugin = health.New(s.identity.DeviceID)
 	if err := s.registry.Register(s.healthPlugin, true); err != nil {
 		return fmt.Errorf("register health plugin: %w", err)
+	}
+	s.notifsPlugin = notifications.New(s.peerName)
+	if err := s.registry.Register(s.notifsPlugin, true); err != nil {
+		return fmt.Errorf("register notifications plugin: %w", err)
 	}
 
 	s.manager.OnSessionChange = func(deviceID string, connected bool) {
@@ -717,11 +722,11 @@ func (s *WeDropService) checkClipboard() {
 type sessionHandler struct{ s *WeDropService }
 
 // OnMessage first offers the message to the plugin registry (features
-// already extracted into their own package — today, device-health) and
-// falls back to the not-yet-extracted feature switch below. registry
-// silently no-ops for a message type nothing has claimed, so this ordering
-// is always safe. Once every feature is extracted, the switch disappears
-// entirely.
+// already extracted into their own package — today, device-health and
+// notifications) and falls back to the not-yet-extracted feature switch
+// below. registry silently no-ops for a message type nothing has claimed,
+// so this ordering is always safe. Once every feature is extracted, the
+// switch disappears entirely.
 func (h sessionHandler) OnMessage(session *transport.Session, msgType protocol.MessageType, raw []byte) {
 	h.s.registry.OnMessage(plugin.PeerRef{DeviceID: session.DeviceID(), Info: session.PeerInfo()}, msgType, raw)
 
@@ -730,11 +735,6 @@ func (h sessionHandler) OnMessage(session *transport.Session, msgType protocol.M
 		var msg protocol.ClipboardMessage
 		if json.Unmarshal(raw, &msg) == nil {
 			h.s.onClipboard(session, msg)
-		}
-	case protocol.TypeNotification:
-		var msg protocol.NotificationMessage
-		if json.Unmarshal(raw, &msg) == nil {
-			h.s.onNotification(session, msg)
 		}
 	case protocol.TypeMedia:
 		var msg protocol.MediaMessage
@@ -799,6 +799,10 @@ func (h pluginHost) ConnectedPeers(capability string) []plugin.PeerRef {
 	return out
 }
 
+func (h pluginHost) Allows(deviceID string, capability string) bool {
+	return h.s.trust.Allows(deviceID, capability)
+}
+
 func (h pluginHost) Emit(event plugin.Event) {
 	// Today no plugin event has a dedicated frontend listener — a plugin's
 	// state (e.g. health readings) is read back out through GetState, so a
@@ -806,12 +810,24 @@ func (h pluginHost) Emit(event plugin.Event) {
 	h.s.pushState()
 }
 
-// LoadPluginSettings/SavePluginSettings are stubbed until the settings/
-// capability de-hardcoding migration (see plan) adds a PluginSettings map
-// to storage.Settings; no plugin extracted so far needs persisted
-// per-plugin settings yet.
-func (h pluginHost) LoadPluginSettings(id plugin.ID) []byte { return nil }
+// LoadPluginSettings bridges each plugin's own settings shape from the
+// existing shared storage.Settings struct, until the settings/capability
+// de-hardcoding migration (see plan) gives every plugin real, independently
+// persisted settings. Read fresh every call, matching how the pre-plugin
+// code always read s.currentSettings() live rather than caching a copy.
+func (h pluginHost) LoadPluginSettings(id plugin.ID) []byte {
+	settings := h.s.currentSettings()
+	switch id {
+	case notifications.ID:
+		data, _ := json.Marshal(notifications.Settings{Receive: settings.ReceiveNotifications})
+		return data
+	}
+	return nil
+}
 
+// SavePluginSettings is unused so far — every plugin's settings today are
+// still owned by storage.Settings and changed through UpdateSettings
+// (api.go), not through the plugin itself.
 func (h pluginHost) SavePluginSettings(id plugin.ID, data []byte) error { return nil }
 
 func (s *WeDropService) onClipboard(session *transport.Session, msg protocol.ClipboardMessage) {
@@ -856,32 +872,6 @@ func (s *WeDropService) onClipboard(session *transport.Session, msg protocol.Cli
 		Incoming:   true,
 	})
 	s.emit("clipboard:received", name)
-	s.pushState()
-}
-
-func (s *WeDropService) onNotification(session *transport.Session, msg protocol.NotificationMessage) {
-	if !s.currentSettings().ReceiveNotifications {
-		return
-	}
-	if !s.trust.Allows(session.DeviceID(), protocol.CapNotifications) {
-		return
-	}
-
-	view := NotificationView{
-		ID:         msg.ID,
-		DeviceID:   session.DeviceID(),
-		DeviceName: s.peerName(session.DeviceID(), session.PeerInfo().Name),
-		App:        msg.App,
-		Title:      msg.Title,
-		Body:       msg.Body,
-		Time:       msg.Time,
-	}
-	if view.Time == 0 {
-		view.Time = nowMillis()
-	}
-
-	s.notifs.Push(view)
-	s.emit("notification", view)
 	s.pushState()
 }
 

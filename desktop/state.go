@@ -51,7 +51,7 @@ type PairingPrompt struct {
 type TransferState string
 
 const (
-	TransferPending   TransferState = "pending"   // waiting for the user to accept
+	TransferPending   TransferState = "pending" // waiting for the user to accept
 	TransferActive    TransferState = "active"
 	TransferCompleted TransferState = "completed"
 	TransferFailed    TransferState = "failed"

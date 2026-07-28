@@ -38,6 +38,13 @@ abstract class PluginApi {
   Future<void> send(String deviceId, Map<String, dynamic> message);
   void broadcast(Map<String, dynamic> message);
   List<PeerRef> connectedPeers();
+
+  /// Whether a specific peer has been granted this plugin's capability (the
+  /// per-device trust permission, distinct from whether the peer merely
+  /// advertised wanting it). A plugin whose feature has no per-device
+  /// permission gate can simply not call this.
+  bool allows(String deviceId);
+
   void emit(String name, Object? payload);
 
   /// This plugin's own settings, previously saved via [saveSettings], as a

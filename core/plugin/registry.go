@@ -18,6 +18,9 @@ type Host interface {
 	Send(deviceID string, v interface{}) error
 	Broadcast(capability string, v interface{})
 	ConnectedPeers(capability string) []PeerRef
+	// Allows reports whether deviceID has been granted capability — the
+	// per-device trust permission a user sets per paired device.
+	Allows(deviceID string, capability string) bool
 	Emit(event Event)
 	LoadPluginSettings(id ID) []byte
 	SavePluginSettings(id ID, data []byte) error
@@ -256,6 +259,10 @@ func (a *pluginAPI) Broadcast(v interface{}) {
 
 func (a *pluginAPI) ConnectedPeers() []PeerRef {
 	return a.registry.host.ConnectedPeers(string(a.id))
+}
+
+func (a *pluginAPI) Allows(deviceID string) bool {
+	return a.registry.host.Allows(deviceID, string(a.id))
 }
 
 func (a *pluginAPI) Emit(name string, payload interface{}) {

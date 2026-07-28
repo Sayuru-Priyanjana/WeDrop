@@ -1,6 +1,5 @@
 package com.example.mobile
 
-import android.app.Notification
 import android.content.ComponentName
 import android.content.Context
 import android.graphics.Bitmap
@@ -44,38 +43,7 @@ class WeDropNotificationListener : NotificationListenerService() {
     // ------------------------------------------------------------ notifications
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        // Ongoing notifications (music controls, "USB charging") are noise for a
-        // mirror; the user wants messages and alerts, not persistent status.
-        if (sbn.isOngoing) return
-        if (sbn.packageName == packageName) return
-
-        val extras = sbn.notification.extras
-        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
-        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
-
-        // Nothing worth forwarding if both the title and body are empty.
-        if (title.isEmpty() && text.isEmpty()) return
-
-        MainActivity.emit(
-            mapOf(
-                "type" to "notification_posted",
-                "id" to sbn.key,
-                "app" to sbn.packageName,
-                "app_label" to appLabel(sbn.packageName),
-                "title" to title,
-                "body" to text,
-                "time" to sbn.postTime,
-            ),
-        )
-    }
-
-    private fun appLabel(pkg: String): String {
-        return try {
-            val info = packageManager.getApplicationInfo(pkg, 0)
-            packageManager.getApplicationLabel(info).toString()
-        } catch (e: Exception) {
-            pkg
-        }
+        NotificationMirror.onPosted(this, sbn)
     }
 
     // ------------------------------------------------------------ media session
@@ -171,7 +139,7 @@ class WeDropNotificationListener : NotificationListenerService() {
                 "playing" to (playback?.state == PlaybackState.STATE_PLAYING),
                 "title" to title,
                 "artist" to artist,
-                "app" to appLabel(controller.packageName),
+                "app" to NotificationMirror.appLabel(this, controller.packageName),
                 "position" to (playback?.position ?: -1L),
                 "duration" to if (durationRaw > 0) durationRaw else -1L,
                 "volume" to currentVolumePercent(),

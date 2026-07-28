@@ -57,6 +57,11 @@ type API interface {
 	// ConnectedPeers lists peers currently reachable and permitted for this
 	// plugin's capability.
 	ConnectedPeers() []PeerRef
+	// Allows reports whether a specific peer has been granted this plugin's
+	// capability (the per-device trust permission, distinct from whether
+	// the peer merely advertised wanting it). A plugin whose feature has no
+	// per-device permission gate can simply not call this.
+	Allows(deviceID string) bool
 	// Emit raises a UI-facing event tagged with this plugin's ID.
 	Emit(name string, payload interface{})
 	// Settings returns this plugin's own settings, previously saved via

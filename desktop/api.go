@@ -40,16 +40,29 @@ func (s *WeDropService) GetState() AppState {
 			Online:     true,
 			Connected:  true,
 		},
-		PublicKey: device.PublicKey,
-		Paired:    []DeviceView{},
+		PublicKey:  device.PublicKey,
+		Paired:     []DeviceView{},
 		Discovered: []DeviceView{},
-		Transfers: []TransferView{},
-		Clipboard: s.clipHistory.Snapshot(),
-		Notifs:    s.notifs.Snapshot(),
+		Transfers:  []TransferView{},
+		Clipboard:  s.clipHistory.Snapshot(),
 	}
 
 	if !ready {
 		return state
+	}
+
+	state.Notifs = []NotificationView{}
+	for _, item := range s.notifsPlugin.Snapshot() {
+		state.Notifs = append(state.Notifs, NotificationView{
+			ID:         item.ID,
+			DeviceID:   item.DeviceID,
+			DeviceName: item.DeviceName,
+			App:        item.App,
+			Title:      item.Title,
+			Body:       item.Body,
+			Time:       item.Time,
+			Read:       item.Read,
+		})
 	}
 
 	state.ListenPort = s.manager.Port()
@@ -644,13 +657,13 @@ func (s *WeDropService) sendRemoteInput(deviceID string, input protocol.RemoteIn
 
 // MarkNotificationsRead clears the unread badge.
 func (s *WeDropService) MarkNotificationsRead() {
-	s.notifs.Update(func(n *NotificationView) { n.Read = true })
+	s.notifsPlugin.MarkAllRead()
 	s.pushState()
 }
 
 // ClearNotifications empties the notification feed.
 func (s *WeDropService) ClearNotifications() {
-	s.notifs.Clear()
+	s.notifsPlugin.Clear()
 	s.pushState()
 }
 

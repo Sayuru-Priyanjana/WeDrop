@@ -19,6 +19,7 @@ import 'transport/framing.dart';
 import 'transport/handshake.dart';
 import 'transport/session.dart';
 import '../plugins/health/health_plugin.dart';
+import '../plugins/notifications/notifications_plugin.dart';
 
 /// A device as the UI sees it: trust store, discovery and session state merged.
 class DeviceView {
@@ -98,24 +99,6 @@ class ClipboardEntry {
   }) : time = time ?? DateTime.now().millisecondsSinceEpoch;
 }
 
-class NotificationEntry {
-  final String id;
-  final String deviceName;
-  final String app;
-  final String title;
-  final String body;
-  final int time;
-
-  const NotificationEntry({
-    required this.id,
-    required this.deviceName,
-    required this.app,
-    required this.title,
-    required this.body,
-    required this.time,
-  });
-}
-
 /// An inbound pairing request awaiting the user's decision.
 class PairingPrompt {
   final PairingRequest request;
@@ -144,6 +127,7 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   late ConnectionManager _manager;
   late PluginRegistry _plugins;
   late HealthPlugin _healthPlugin;
+  late NotificationsPlugin _notifsPlugin;
 
   /// True once the network stack is fully constructed. Guards the late fields
   /// above so a startup that fails partway — or a test host with no platform
@@ -156,7 +140,10 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
 
   final List<TransferView> transfers = [];
   final List<ClipboardEntry> clipboardHistory = [];
-  final List<NotificationEntry> notifications = [];
+
+  /// The notifications feed — owned by _notifsPlugin; exposed here so the UI
+  /// keeps reading it off AppService like everything else.
+  List<NotificationEntry> get notifications => _notifsPlugin.items;
 
   /// Latest media state received from each peer, keyed by device ID. Health
   /// moved to the health plugin (plugins/health) — see _healthPlugin.
@@ -295,6 +282,11 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
       _plugins = PluginRegistry(_PluginHost(this));
       _healthPlugin = HealthPlugin(deviceId);
       _plugins.register(_healthPlugin);
+      _notifsPlugin = NotificationsPlugin(
+        resolveName: (deviceId, fallback) => _store.trusted(deviceId)?.name ?? fallback,
+        generateId: () => _uuid.v4(),
+      );
+      _plugins.register(_notifsPlugin);
 
       final port = await _manager.start();
       // The network stack is now safe to touch and tear down.
@@ -395,7 +387,7 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
         break;
 
       case 'notification_posted':
-        _forwardLocalNotification(event);
+        _notifsPlugin.forwardLocal(event);
         break;
 
       case 'notification_action':
@@ -466,25 +458,6 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     }
   }
 
-  /// Mirrors one of this phone's notifications to the rest of the ecosystem.
-  void _forwardLocalNotification(Map<String, dynamic> event) {
-    if (!settings.shareNotifications) return;
-
-    final app = event['app'] as String? ?? '';
-    // WeDrop's own ongoing service notification would otherwise echo endlessly.
-    if (app.contains('wedrop')) return;
-
-    _manager.broadcast(
-      Capability.notifications,
-      NotificationMessage(
-        id: event['id'] as String? ?? _uuid.v4(),
-        app: event['app_label'] as String? ?? app,
-        title: event['title'] as String? ?? '',
-        body: event['body'] as String? ?? '',
-        time: event['time'] as int? ?? DateTime.now().millisecondsSinceEpoch,
-      ).toJson(),
-    );
-  }
 
   // ----------------------------------------------------- PeerAuthorizer
 
@@ -510,9 +483,6 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     switch (msgType) {
       case MsgType.clipboard:
         _onClipboard(session, ClipboardMessage.fromJson(raw));
-        break;
-      case MsgType.notification:
-        _onNotification(session, NotificationMessage.fromJson(raw));
         break;
       case MsgType.media:
         final command = raw['command'] as String?;
@@ -554,32 +524,6 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     final name = _store.trusted(session.deviceId)?.name ?? session.peerInfo.name;
     _pushClipboardEntry(ClipboardEntry(text: message.text, originName: name, incoming: true));
     _toastController.add('Clipboard from $name');
-    notifyListeners();
-  }
-
-  void _onNotification(Session session, NotificationMessage message) {
-    if (!settings.receiveNotifications) return;
-    if (!_store.allows(session.deviceId, Capability.notifications)) return;
-
-    final name = _store.trusted(session.deviceId)?.name ?? session.peerInfo.name;
-    notifications.insert(
-      0,
-      NotificationEntry(
-        id: message.id,
-        deviceName: name,
-        app: message.app,
-        title: message.title,
-        body: message.body,
-        time: message.time,
-      ),
-    );
-    if (notifications.length > 100) notifications.removeLast();
-
-    NativeBridge.showNotification(
-      title: message.title.isEmpty ? '$name · ${message.app}' : message.title,
-      body: message.body,
-      tag: message.id,
-    );
     notifyListeners();
   }
 
@@ -1240,13 +1184,27 @@ class _PluginHost implements PluginHost {
   }
 
   @override
+  bool allows(String deviceId, String capability) => _service._store.allows(deviceId, capability);
+
+  @override
   void emit(PluginEvent event) => _service._notifyPlugins();
 
-  // Stubbed until the settings/capability de-hardcoding migration adds a
-  // pluginSettings map to Settings; no plugin extracted so far needs
-  // persisted per-plugin settings yet.
+  // Bridges each plugin's own settings shape from the existing shared
+  // Settings object, until the settings/capability de-hardcoding migration
+  // gives every plugin real, independently persisted settings. Read fresh
+  // every call, matching how the pre-plugin code always read
+  // AppService.settings live rather than caching a copy.
   @override
-  Map<String, dynamic> loadPluginSettings(PluginId id) => const {};
+  Map<String, dynamic> loadPluginSettings(PluginId id) {
+    switch (id) {
+      case Capability.notifications:
+        return {
+          'receive': _service.settings.receiveNotifications,
+          'share': _service.settings.shareNotifications,
+        };
+    }
+    return const {};
+  }
 
   @override
   Future<void> savePluginSettings(PluginId id, Map<String, dynamic> data) async {}

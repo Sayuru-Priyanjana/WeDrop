@@ -11,6 +11,11 @@ abstract class PluginHost {
   Future<void> send(String deviceId, Map<String, dynamic> message);
   void broadcast(String capability, Map<String, dynamic> message);
   List<PeerRef> connectedPeers(String capability);
+
+  /// Whether deviceId has been granted capability — the per-device trust
+  /// permission a user sets per paired device.
+  bool allows(String deviceId, String capability);
+
   void emit(PluginEvent event);
   Map<String, dynamic> loadPluginSettings(PluginId id);
   Future<void> savePluginSettings(PluginId id, Map<String, dynamic> data);
@@ -138,6 +143,9 @@ class _PluginApiImpl implements PluginApi {
 
   @override
   List<PeerRef> connectedPeers() => _registry.host.connectedPeers(_id);
+
+  @override
+  bool allows(String deviceId) => _registry.host.allows(deviceId, _id);
 
   @override
   void emit(String name, Object? payload) =>
