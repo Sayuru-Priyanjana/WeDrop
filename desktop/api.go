@@ -13,7 +13,6 @@ import (
 
 	"wedrop/core/protocol"
 	"wedrop/core/storage"
-	"wedrop/core/transfer"
 	"wedrop/core/transport"
 )
 
@@ -140,11 +139,22 @@ func (s *WeDropService) GetState() AppState {
 		return state.Discovered[i].Name < state.Discovered[j].Name
 	})
 
-	s.transfersMu.Lock()
-	for _, t := range s.transfers {
-		state.Transfers = append(state.Transfers, *t)
+	for _, t := range s.filesPlugin.Snapshot() {
+		state.Transfers = append(state.Transfers, TransferView{
+			ID:          t.ID,
+			DeviceID:    t.DeviceID,
+			DeviceName:  t.DeviceName,
+			Filename:    t.Filename,
+			Size:        t.Size,
+			Transferred: t.Transferred,
+			Incoming:    t.Incoming,
+			State:       TransferState(t.State),
+			Error:       t.Error,
+			SavedPath:   t.SavedPath,
+			StartedAt:   t.StartedAt,
+			UpdatedAt:   t.UpdatedAt,
+		})
 	}
-	s.transfersMu.Unlock()
 	sort.Slice(state.Transfers, func(i, j int) bool {
 		return state.Transfers[i].StartedAt > state.Transfers[j].StartedAt
 	})
@@ -374,106 +384,19 @@ func (s *WeDropService) SendFiles(deviceID string, paths []string) error {
 	if !s.trust.IsTrusted(deviceID) {
 		return fmt.Errorf("that device is not in your ecosystem")
 	}
-
-	peer, ok := s.disc.Peer(deviceID)
-	if !ok {
+	if _, ok := s.disc.Peer(deviceID); !ok {
 		return fmt.Errorf("%s is not on the network right now", s.peerName(deviceID, ""))
 	}
 
 	for _, path := range paths {
-		go s.sendOneFile(deviceID, peer.IP, peer.TCPPort, path)
+		go s.filesPlugin.SendFile(deviceID, path)
 	}
 	return nil
 }
 
-func (s *WeDropService) sendOneFile(deviceID, ip string, port int, path string) {
-	name := s.peerName(deviceID, "")
-	transferID := newTransferID()
-
-	view := &TransferView{
-		ID:         transferID,
-		DeviceID:   deviceID,
-		DeviceName: name,
-		Filename:   filepath.Base(path),
-		Incoming:   false,
-		State:      TransferActive,
-		StartedAt:  nowMillis(),
-		UpdatedAt:  nowMillis(),
-	}
-	if info, err := statSize(path); err == nil {
-		view.Size = info
-	}
-	s.putTransfer(view)
-
-	fail := func(err error) {
-		s.updateTransfer(transferID, func(t *TransferView) {
-			t.State = TransferFailed
-			t.Error = err.Error()
-		})
-		s.toast("error", fmt.Sprintf("Could not send %s: %v", filepath.Base(path), err))
-	}
-
-	key, trusted := s.trust.TrustedKey(deviceID)
-	if !trusted {
-		fail(fmt.Errorf("device is not paired"))
-		return
-	}
-
-	local := transport.LocalInfo{
-		Identity:   s.identity,
-		Name:       s.deviceName(),
-		Platform:   runtime.GOOS,
-		FormFactor: protocol.FormDesktop,
-	}
-
-	// A transfer gets its own connection so a big file cannot stall the
-	// control session that carries clipboard sync and keepalives.
-	result, err := transport.Dial(fmt.Sprintf("%s:%d", ip, port), local, protocol.IntentTransfer, key, 8*time.Second)
-	if err != nil {
-		fail(err)
-		return
-	}
-	defer result.Conn.Close()
-
-	sender := transfer.NewSender(result.Conn)
-	throttle := newProgressThrottle()
-	sender.OnProgress = func(done, total int64) {
-		if throttle.should(done, total) {
-			s.updateTransfer(transferID, func(t *TransferView) {
-				t.Transferred = done
-				t.Size = total
-			})
-		}
-	}
-
-	if err := sender.SendFile(transferID, path); err != nil {
-		fail(err)
-		return
-	}
-
-	s.updateTransfer(transferID, func(t *TransferView) {
-		t.State = TransferCompleted
-		t.Transferred = t.Size
-	})
-	s.toast("success", fmt.Sprintf("Sent %s to %s", filepath.Base(path), name))
-}
-
 // RespondToTransfer answers a pending incoming file prompt.
 func (s *WeDropService) RespondToTransfer(transferID string, accept bool) error {
-	s.transfersMu.Lock()
-	decision, ok := s.pendingIn[transferID]
-	s.transfersMu.Unlock()
-
-	if !ok {
-		return fmt.Errorf("that transfer is no longer waiting")
-	}
-
-	select {
-	case decision <- accept:
-		return nil
-	default:
-		return fmt.Errorf("that transfer has already been answered")
-	}
+	return s.filesPlugin.RespondToTransfer(transferID, accept)
 }
 
 // ChooseDownloadDir opens a folder picker and stores the result.

@@ -71,6 +71,18 @@ type API interface {
 	AllowsCapability(deviceID string, capability string) bool
 	// Emit raises a UI-facing event tagged with this plugin's ID.
 	Emit(name string, payload interface{})
+	// ShowWindow brings the app's window to the foreground — used for
+	// time-sensitive prompts (e.g. an incoming file) the user needs to see
+	// right away.
+	ShowWindow()
+	// Toast surfaces a one-off UI message (level is "info"/"success"/"error").
+	Toast(level, message string)
+	// DialTransfer opens a new outbound connection to a peer for a purpose
+	// outside the shared control session — today, only file transfer, which
+	// needs its own connection so a large file cannot stall clipboard sync
+	// or keepalives behind it. Returns the peer's current device info
+	// alongside the connection.
+	DialTransfer(deviceID string) (TransferConn, protocol.DeviceInfo, error)
 	// Settings returns this plugin's own settings, previously saved via
 	// SaveSettings, as raw JSON (empty/null if never saved). Core stores
 	// this opaquely — it does not know or care about a plugin's settings

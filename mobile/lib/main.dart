@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'core/app_service.dart';
 import 'core/platform/native_bridge.dart';
 import 'core/transport/connection_manager.dart' show PairingRequest;
+import 'plugins/files/files_plugin.dart' show IncomingFilePrompt;
 import 'ui/device_screen.dart';
 import 'ui/screens.dart';
 import 'ui/theme.dart';

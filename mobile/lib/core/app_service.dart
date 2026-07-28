@@ -11,12 +11,11 @@ import 'plugin/plugin.dart';
 import 'plugin/registry.dart';
 import 'protocol/messages.dart';
 import 'storage/store.dart';
-import 'transfer/transfer.dart';
 import 'transport/connection_manager.dart';
-import 'transport/framing.dart';
 import 'transport/handshake.dart';
 import 'transport/session.dart';
 import '../plugins/clipboard/clipboard_plugin.dart';
+import '../plugins/files/files_plugin.dart';
 import '../plugins/health/health_plugin.dart';
 import '../plugins/media/media_plugin.dart';
 import '../plugins/notifications/notifications_plugin.dart';
@@ -55,49 +54,11 @@ class DeviceView {
   });
 }
 
-enum TransferStatus { pending, active, completed, failed, declined }
-
-class TransferView {
-  final String id;
-  final String deviceId;
-  final String deviceName;
-  final String filename;
-  int size;
-  int transferred;
-  final bool incoming;
-  TransferStatus status;
-  String error;
-  String savedPath;
-  final int startedAt;
-
-  TransferView({
-    required this.id,
-    required this.deviceId,
-    required this.deviceName,
-    required this.filename,
-    this.size = 0,
-    this.transferred = 0,
-    required this.incoming,
-    this.status = TransferStatus.active,
-    this.error = '',
-    this.savedPath = '',
-    int? startedAt,
-  }) : startedAt = startedAt ?? DateTime.now().millisecondsSinceEpoch;
-}
-
 /// An inbound pairing request awaiting the user's decision.
 class PairingPrompt {
   final PairingRequest request;
   final Completer<PairingDecision> completer;
   const PairingPrompt(this.request, this.completer);
-}
-
-/// An inbound file awaiting the user's decision.
-class IncomingFilePrompt {
-  final TransferOffer offer;
-  final String deviceName;
-  final Completer<bool> completer;
-  const IncomingFilePrompt(this.offer, this.deviceName, this.completer);
 }
 
 /// The whole mobile app behind one listenable object.
@@ -115,6 +76,7 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   late NotificationsPlugin _notifsPlugin;
   late ClipboardPlugin _clipPlugin;
   late MediaPlugin _mediaPlugin;
+  late FilesPlugin _filesPlugin;
 
   /// True once the network stack is fully constructed. Guards the late fields
   /// above so a startup that fails partway — or a test host with no platform
@@ -125,8 +87,6 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   String startupError = '';
   String downloadDir = '';
 
-  final List<TransferView> transfers = [];
-
   /// The notifications feed — owned by _notifsPlugin; exposed here so the UI
   /// keeps reading it off AppService like everything else.
   List<NotificationEntry> get notifications => _notifsPlugin.items;
@@ -135,8 +95,14 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   /// UI keeps reading it off AppService like everything else.
   List<ClipboardEntry> get clipboardHistory => _clipPlugin.items;
 
+  /// The transfer history — owned by _filesPlugin; exposed here so the UI
+  /// keeps reading it off AppService like everything else.
+  List<TransferView> get transfers => _filesPlugin.transfers;
+
+  /// An inbound file awaiting the user's decision — owned by _filesPlugin.
+  IncomingFilePrompt? get incomingFilePrompt => _filesPlugin.incomingFilePrompt;
+
   PairingPrompt? pairingPrompt;
-  IncomingFilePrompt? incomingFilePrompt;
 
   /// Outgoing pairing in flight, so the UI can show the verification code.
   String? outgoingPairingName;
@@ -239,7 +205,13 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
           onClosed: (_, error) => _refreshServiceStatus(),
         ),
         onPairingRequest: _onPairingRequest,
-        onTransferOffer: _onTransferOffer,
+        // A closure, not a direct tear-off: _filesPlugin is assigned after
+        // this ConnectionManager is constructed (same pattern as _plugins
+        // below), so evaluating _filesPlugin.handleTransferOffer here
+        // directly would throw before it exists. Deferring to a closure
+        // means it is only read once a transfer actually arrives.
+        onTransferOffer: (conn, peer, offer) =>
+            _filesPlugin.handleTransferOffer(conn, peer, offer),
         onSessionChange: (deviceId, connected) {
           if (connected) {
             _store.touchLastSeen(deviceId);
@@ -277,6 +249,12 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
         resolveName: (deviceId, fallback) => _store.trusted(deviceId)?.name ?? fallback,
       );
       _plugins.register(_mediaPlugin);
+      _filesPlugin = FilesPlugin(
+        resolveName: (deviceId, fallback) => _store.trusted(deviceId)?.name ?? fallback,
+        generateId: () => _uuid.v4(),
+        downloadDir: () => downloadDir,
+      );
+      _plugins.register(_filesPlugin);
 
       final port = await _manager.start();
       // The network stack is now safe to touch and tear down.
@@ -520,95 +498,6 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     return decision;
   }
 
-  Future<void> _onTransferOffer(
-    SecureConnection conn,
-    DeviceInfo peer,
-    TransferOffer offer,
-  ) async {
-    final name = _store.trusted(peer.deviceId)?.name ?? peer.name;
-    final receiver = FileReceiver(conn, downloadDir);
-
-    try {
-      if (!_store.allows(peer.deviceId, Capability.files)) {
-        await receiver.decline(offer, 'file transfers from this device are switched off');
-        return;
-      }
-
-      final view = TransferView(
-        id: offer.transferId,
-        deviceId: peer.deviceId,
-        deviceName: name,
-        filename: offer.filename,
-        size: offer.size,
-        incoming: true,
-        status: TransferStatus.pending,
-      );
-      _pushTransfer(view);
-
-      if (!settings.autoAcceptFiles) {
-        final completer = Completer<bool>();
-        incomingFilePrompt = IncomingFilePrompt(offer, name, completer);
-        notifyListeners();
-
-        final accepted = await completer.future.timeout(
-          const Duration(minutes: 2),
-          onTimeout: () => false,
-        );
-        incomingFilePrompt = null;
-
-        if (!accepted) {
-          await receiver.decline(offer, 'declined');
-          view.status = TransferStatus.declined;
-          notifyListeners();
-          return;
-        }
-      }
-
-      view.status = TransferStatus.active;
-      notifyListeners();
-
-      final throttle = _ProgressThrottle();
-      final tracked = FileReceiver(
-        conn,
-        downloadDir,
-        onProgress: (done, total) {
-          view.transferred = done;
-          if (throttle.should(done, total)) notifyListeners();
-        },
-      );
-
-      final savedPath = await tracked.receive(offer);
-      view
-        ..status = TransferStatus.completed
-        ..transferred = offer.size
-        ..savedPath = savedPath;
-
-      NativeBridge.showNotification(
-        title: 'File received',
-        body: '${offer.filename} from $name',
-        tag: offer.transferId,
-      );
-      _toastController.add('Received ${offer.filename}');
-    } catch (error) {
-      final view = transfers.firstWhere(
-        (t) => t.id == offer.transferId,
-        orElse: () => TransferView(
-          id: offer.transferId,
-          deviceId: peer.deviceId,
-          deviceName: name,
-          filename: offer.filename,
-          incoming: true,
-        ),
-      );
-      view
-        ..status = TransferStatus.failed
-        ..error = error.toString();
-      _toastController.add('Could not receive ${offer.filename}');
-    } finally {
-      await conn.close();
-      notifyListeners();
-    }
-  }
 
   // ---------------------------------------------------------- user actions
 
@@ -671,11 +560,7 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   }
 
   /// Answers the pending incoming file prompt.
-  void respondToIncomingFile(bool accept) {
-    final prompt = incomingFilePrompt;
-    if (prompt == null || prompt.completer.isCompleted) return;
-    prompt.completer.complete(accept);
-  }
+  void respondToIncomingFile(bool accept) => _filesPlugin.respondToIncomingFile(accept);
 
   /// Removes a device and tells it, so both sides forget each other.
   Future<void> unpair(String targetDeviceId) async {
@@ -698,78 +583,8 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   }
 
   /// Sends one or more files to a paired device.
-  Future<void> sendFiles(String targetDeviceId, List<String> paths) async {
-    final peer = _discovery.peer(targetDeviceId);
-    final key = _store.trustedKey(targetDeviceId);
-    if (peer == null) throw Exception('that device is not on the network right now');
-    if (key == null) throw Exception('that device is not in your ecosystem');
-
-    for (final path in paths) {
-      unawaited(_sendOneFile(targetDeviceId, peer, key, path));
-    }
-  }
-
-  Future<void> _sendOneFile(
-    String targetDeviceId,
-    DiscoveryMessage peer,
-    String expectedKey,
-    String path,
-  ) async {
-    final file = File(path);
-    final name = _store.trusted(targetDeviceId)?.name ?? peer.name;
-    final transferId = _uuid.v4();
-
-    final view = TransferView(
-      id: transferId,
-      deviceId: targetDeviceId,
-      deviceName: name,
-      filename: path.split(Platform.pathSeparator).last,
-      incoming: false,
-    );
-    try {
-      view.size = await file.length();
-    } catch (_) {}
-    _pushTransfer(view);
-
-    HandshakeResult? result;
-    try {
-      // A transfer gets its own connection so a big file cannot stall the
-      // control session carrying clipboard sync and keepalives.
-      result = await dialHandshake(
-        host: peer.ip,
-        port: peer.tcpPort,
-        local: _localInfo,
-        intent: Intent.transfer,
-        expectedKey: expectedKey,
-        timeout: const Duration(seconds: 8),
-      );
-
-      final throttle = _ProgressThrottle();
-      final sender = FileSender(
-        result.connection,
-        onProgress: (done, total) {
-          view.transferred = done;
-          view.size = total;
-          if (throttle.should(done, total)) notifyListeners();
-        },
-      );
-
-      await sender.send(transferId: transferId, file: file);
-      view
-        ..status = TransferStatus.completed
-        ..transferred = view.size;
-      _toastController.add('Sent ${view.filename} to $name');
-    } catch (error) {
-      view
-        ..status =
-            error is TransferDeclined ? TransferStatus.declined : TransferStatus.failed
-        ..error = error.toString();
-      _toastController.add('Could not send ${view.filename}');
-    } finally {
-      await result?.connection.close();
-      notifyListeners();
-    }
-  }
+  Future<void> sendFiles(String targetDeviceId, List<String> paths) =>
+      _filesPlugin.sendFiles(targetDeviceId, paths);
 
   /// Sends the current clipboard to the ecosystem immediately.
   Future<void> pushClipboard() async {
@@ -895,12 +710,6 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     });
   }
 
-  void _pushTransfer(TransferView view) {
-    transfers.insert(0, view);
-    if (transfers.length > 40) transfers.removeLast();
-    notifyListeners();
-  }
-
   void _refreshServiceStatus() {
     final connected = _manager.connectedDevices
         .map((id) => _store.trusted(id)?.name)
@@ -973,12 +782,32 @@ class _PluginHost implements PluginHost {
   @override
   void emit(PluginEvent event) {
     // Clipboard's "received" event carries the sender's display name and
-    // used to always surface a toast — the one plugin event with a specific
-    // UI side effect beyond a rebuild.
+    // used to always surface a toast. Files' "toast" event carries a
+    // ready-made message directly. Both predate the plugin architecture as
+    // specific UI side effects beyond a rebuild.
     if (event.plugin == Capability.clipboard && event.name == 'received') {
       _service._toastController.add('Clipboard from ${event.payload}');
+    } else if (event.plugin == Capability.files && event.name == 'toast') {
+      _service._toastController.add(event.payload as String);
     }
     _service._notifyPlugins();
+  }
+
+  @override
+  Future<HandshakeResult> dialTransfer(String deviceId) async {
+    final peer = _service._discovery.peer(deviceId);
+    final key = _service._store.trustedKey(deviceId);
+    if (peer == null) throw Exception('that device is not on the network right now');
+    if (key == null) throw Exception('that device is not in your ecosystem');
+
+    return dialHandshake(
+      host: peer.ip,
+      port: peer.tcpPort,
+      local: _service._localInfo,
+      intent: Intent.transfer,
+      expectedKey: key,
+      timeout: const Duration(seconds: 8),
+    );
   }
 
   // Bridges each plugin's own settings shape from the existing shared
@@ -1002,6 +831,11 @@ class _PluginHost implements PluginHost {
         };
       case Capability.media:
         return {'allow_control': _service.settings.allowMediaControl};
+      case Capability.files:
+        return {
+          'auto_accept': _service.settings.autoAcceptFiles,
+          'download_dir': _service.downloadDir,
+        };
     }
     return const {};
   }
@@ -1010,15 +844,3 @@ class _PluginHost implements PluginHost {
   Future<void> savePluginSettings(PluginId id, Map<String, dynamic> data) async {}
 }
 
-/// Keeps a fast transfer from rebuilding the widget tree on every chunk.
-class _ProgressThrottle {
-  DateTime _last = DateTime.fromMillisecondsSinceEpoch(0);
-
-  bool should(int done, int total) {
-    if (done >= total) return true;
-    final now = DateTime.now();
-    if (now.difference(_last) < const Duration(milliseconds: 150)) return false;
-    _last = now;
-    return true;
-  }
-}

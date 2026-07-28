@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../protocol/messages.dart';
+import '../transport/handshake.dart';
 
 /// Identifies a plugin. A plugin's id doubles as the capability string it
 /// advertises to peers (see [DeviceInfo.capabilities]) and as the key under
@@ -46,6 +47,12 @@ abstract class PluginApi {
   bool allows(String deviceId);
 
   void emit(String name, Object? payload);
+
+  /// Opens a new outbound connection to a peer for a purpose outside the
+  /// shared control session — today, only file transfer, which needs its
+  /// own connection so a large file cannot stall clipboard sync or
+  /// keepalives behind it.
+  Future<HandshakeResult> dialTransfer(String deviceId);
 
   /// This plugin's own settings, previously saved via [saveSettings], as a
   /// raw map (empty if never saved). Core stores this opaquely — it does

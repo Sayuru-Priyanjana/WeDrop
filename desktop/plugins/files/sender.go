@@ -3,7 +3,7 @@
 // A transfer always runs on its own connection with intent "transfer". Keeping
 // it off the control session means a large file cannot stall clipboard sync or
 // keepalives behind it, and a failed transfer cannot take the session down.
-package transfer
+package files
 
 import (
 	"encoding/json"

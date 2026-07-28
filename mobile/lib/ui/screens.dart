@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/app_service.dart';
 import '../core/protocol/messages.dart';
 import '../core/storage/store.dart';
+import '../plugins/files/files_plugin.dart' show TransferStatus;
 import 'theme.dart';
 import 'widgets.dart';
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../transport/handshake.dart';
 import '../transport/session.dart';
 import 'plugin.dart';
 
@@ -17,6 +18,7 @@ abstract class PluginHost {
   bool allows(String deviceId, String capability);
 
   void emit(PluginEvent event);
+  Future<HandshakeResult> dialTransfer(String deviceId);
   Map<String, dynamic> loadPluginSettings(PluginId id);
   Future<void> savePluginSettings(PluginId id, Map<String, dynamic> data);
 }
@@ -150,6 +152,10 @@ class _PluginApiImpl implements PluginApi {
   @override
   void emit(String name, Object? payload) =>
       _registry.host.emit(PluginEvent(_id, name, payload));
+
+  @override
+  Future<HandshakeResult> dialTransfer(String deviceId) =>
+      _registry.host.dialTransfer(deviceId);
 
   @override
   Map<String, dynamic> settings() => _registry.host.loadPluginSettings(_id);

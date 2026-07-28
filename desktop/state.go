@@ -1,8 +1,6 @@
 package main
 
 import (
-	"time"
-
 	"wedrop/core/protocol"
 	"wedrop/core/storage"
 )
@@ -109,5 +107,3 @@ type AppState struct {
 	Pairing    *PairingPrompt     `json:"pairing"`
 	ListenPort int                `json:"listen_port"`
 }
-
-func nowMillis() int64 { return time.Now().UnixMilli() }

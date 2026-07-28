@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"wedrop/core/crypto"
@@ -25,10 +24,10 @@ import (
 	"wedrop/core/plugin"
 	"wedrop/core/protocol"
 	"wedrop/core/storage"
-	"wedrop/core/transfer"
 	"wedrop/core/transport"
 
 	"desktop/plugins/clipboard"
+	"desktop/plugins/files"
 	"desktop/plugins/health"
 	"desktop/plugins/media"
 	"desktop/plugins/notifications"
@@ -67,18 +66,15 @@ type WeDropService struct {
 	pairingPrompt *PairingPrompt
 	pairingReply  chan bool
 
-	transfersMu sync.Mutex
-	transfers   map[string]*TransferView
-	pendingIn   map[string]chan bool
-
-	// Health, notifications, clipboard, media, and remote input each moved
-	// to their own plugin (desktop/plugins/*) — see s.registry.
+	// Health, notifications, clipboard, media, remote input, and files each
+	// moved to their own plugin (desktop/plugins/*) — see s.registry.
 	registry       *plugin.Registry
 	healthPlugin   *health.Plugin
 	notifsPlugin   *notifications.Plugin
 	clipPlugin     *clipboard.Plugin
 	mediaPlugin    *media.Plugin
 	remoteinPlugin *remoteinput.Plugin
+	filesPlugin    *files.Plugin
 
 	stopChan chan struct{}
 	stopOnce sync.Once
@@ -91,10 +87,8 @@ type WeDropService struct {
 // NewWeDropService constructs the service; no I/O happens until startup.
 func NewWeDropService() *WeDropService {
 	return &WeDropService{
-		transfers: make(map[string]*TransferView),
-		pendingIn: make(map[string]chan bool),
-		stopChan:  make(chan struct{}),
-		settings:  storage.DefaultSettings(),
+		stopChan: make(chan struct{}),
+		settings: storage.DefaultSettings(),
 	}
 }
 
@@ -222,7 +216,6 @@ func (s *WeDropService) initCore() error {
 	}
 	s.manager.LocalDeviceInfo = s.localDeviceInfo
 	s.manager.OnPairingRequest = s.handlePairingRequest
-	s.manager.OnTransferOffer = s.handleTransferOffer
 
 	s.registry = plugin.NewRegistry(pluginHost{s})
 	s.healthPlugin = health.New(s.identity.DeviceID)
@@ -244,6 +237,13 @@ func (s *WeDropService) initCore() error {
 	s.remoteinPlugin = remoteinput.New()
 	if err := s.registry.Register(s.remoteinPlugin, true); err != nil {
 		return fmt.Errorf("register remote-input plugin: %w", err)
+	}
+	s.filesPlugin = files.New(s.peerName, s.deviceName)
+	if err := s.registry.Register(s.filesPlugin, true); err != nil {
+		return fmt.Errorf("register files plugin: %w", err)
+	}
+	s.manager.OnTransferOffer = func(conn *transport.SecureConn, peer protocol.DeviceInfo, offer protocol.TransferOffer) {
+		s.registry.HandleTransferOffer(conn, peer, offer)
 	}
 
 	s.manager.OnSessionChange = func(deviceID string, connected bool) {
@@ -483,137 +483,6 @@ func (s *WeDropService) handlePairingRequest(req transport.PairingRequest) trans
 	return transport.PairingDecision{Accepted: true}
 }
 
-// ---------------------------------------------------------------- transfers
-
-func (s *WeDropService) handleTransferOffer(conn *transport.SecureConn, peer protocol.DeviceInfo, offer protocol.TransferOffer) {
-	defer conn.Close()
-
-	settings := s.currentSettings()
-	receiver := transfer.NewReceiver(conn, settings.DownloadDir)
-
-	if !s.trust.Allows(peer.DeviceID, protocol.CapFiles) {
-		receiver.Decline(offer, "file transfers from this device are switched off")
-		return
-	}
-
-	name := s.peerName(peer.DeviceID, peer.Name)
-	view := &TransferView{
-		ID:         offer.TransferID,
-		DeviceID:   peer.DeviceID,
-		DeviceName: name,
-		Filename:   offer.Filename,
-		Size:       offer.Size,
-		Incoming:   true,
-		State:      TransferPending,
-		StartedAt:  nowMillis(),
-		UpdatedAt:  nowMillis(),
-	}
-	s.putTransfer(view)
-
-	if !settings.AutoAcceptFiles {
-		decision := make(chan bool, 1)
-
-		s.transfersMu.Lock()
-		s.pendingIn[offer.TransferID] = decision
-		s.transfersMu.Unlock()
-
-		s.emit("transfer:incoming", view)
-		s.showWindow()
-
-		var accepted bool
-		select {
-		case accepted = <-decision:
-		case <-time.After(2 * time.Minute):
-			accepted = false
-		case <-s.stopChan:
-			accepted = false
-		}
-
-		s.transfersMu.Lock()
-		delete(s.pendingIn, offer.TransferID)
-		s.transfersMu.Unlock()
-
-		if !accepted {
-			receiver.Decline(offer, "declined")
-			s.updateTransfer(offer.TransferID, func(t *TransferView) {
-				t.State = TransferDeclined
-			})
-			return
-		}
-	}
-
-	s.updateTransfer(offer.TransferID, func(t *TransferView) { t.State = TransferActive })
-
-	throttle := newProgressThrottle()
-	receiver.OnProgress = func(done, total int64) {
-		if throttle.should(done, total) {
-			s.updateTransfer(offer.TransferID, func(t *TransferView) { t.Transferred = done })
-		}
-	}
-
-	savedPath, err := receiver.Receive(offer)
-	if err != nil {
-		s.updateTransfer(offer.TransferID, func(t *TransferView) {
-			t.State = TransferFailed
-			t.Error = err.Error()
-		})
-		s.toast("error", fmt.Sprintf("Could not receive %s: %v", offer.Filename, err))
-		return
-	}
-
-	s.updateTransfer(offer.TransferID, func(t *TransferView) {
-		t.State = TransferCompleted
-		t.Transferred = offer.Size
-		t.SavedPath = savedPath
-	})
-	s.toast("success", fmt.Sprintf("Received %s from %s", offer.Filename, name))
-}
-
-func (s *WeDropService) putTransfer(view *TransferView) {
-	s.transfersMu.Lock()
-	s.transfers[view.ID] = view
-	s.transfersMu.Unlock()
-	s.pushState()
-}
-
-func (s *WeDropService) updateTransfer(id string, fn func(*TransferView)) {
-	s.transfersMu.Lock()
-	view, ok := s.transfers[id]
-	if ok {
-		fn(view)
-		view.UpdatedAt = nowMillis()
-	}
-	copyOfView := *view
-	s.transfersMu.Unlock()
-
-	if !ok {
-		return
-	}
-	s.emit("transfer:progress", copyOfView)
-	if copyOfView.State != TransferActive {
-		s.pushState()
-	}
-}
-
-// progressThrottle keeps a fast transfer from flooding the UI bridge with an
-// event per 256 KiB chunk, which costs more than the transfer itself.
-type progressThrottle struct {
-	last time.Time
-}
-
-func newProgressThrottle() *progressThrottle { return &progressThrottle{} }
-
-func (p *progressThrottle) should(done, total int64) bool {
-	if done >= total {
-		return true
-	}
-	if time.Since(p.last) < 120*time.Millisecond {
-		return false
-	}
-	p.last = time.Now()
-	return true
-}
-
 // ---------------------------------------------- transport.SessionHandler
 
 // sessionHandler keeps the session callbacks off WeDropService itself. Wails
@@ -680,10 +549,60 @@ func (h pluginHost) Allows(deviceID string, capability string) bool {
 }
 
 func (h pluginHost) Emit(event plugin.Event) {
-	// Today no plugin event has a dedicated frontend listener — a plugin's
-	// state (e.g. health readings) is read back out through GetState, so a
-	// plugin raising an event just needs the next state push to happen.
+	// The files plugin's "incoming"/"progress" events have dedicated
+	// frontend listeners (transfer:incoming/transfer:progress) predating
+	// the plugin architecture — preserve those exact wire names. Every
+	// other plugin's state (e.g. health readings) is read back out through
+	// GetState, so raising an event just needs the next state push to
+	// happen.
+	if event.Plugin == files.ID {
+		switch event.Name {
+		case "incoming":
+			h.s.emit("transfer:incoming", event.Payload)
+		case "progress":
+			h.s.emit("transfer:progress", event.Payload)
+		}
+	}
 	h.s.pushState()
+}
+
+func (h pluginHost) ShowWindow() {
+	h.s.showWindow()
+}
+
+func (h pluginHost) Toast(level, message string) {
+	h.s.toast(level, message)
+}
+
+// DialTransfer opens a new outbound connection to a peer for a file
+// transfer, which needs its own connection (separate from the shared
+// control session) so a large file cannot stall clipboard sync or
+// keepalives behind it.
+func (h pluginHost) DialTransfer(deviceID string) (plugin.TransferConn, protocol.DeviceInfo, error) {
+	if !h.s.trust.IsTrusted(deviceID) {
+		return nil, protocol.DeviceInfo{}, fmt.Errorf("that device is not in your ecosystem")
+	}
+	peer, ok := h.s.disc.Peer(deviceID)
+	if !ok {
+		return nil, protocol.DeviceInfo{}, fmt.Errorf("%s is not on the network right now", h.s.peerName(deviceID, ""))
+	}
+	key, trusted := h.s.trust.TrustedKey(deviceID)
+	if !trusted {
+		return nil, protocol.DeviceInfo{}, fmt.Errorf("device is not paired")
+	}
+
+	local := transport.LocalInfo{
+		Identity:   h.s.identity,
+		Name:       h.s.deviceName(),
+		Platform:   runtime.GOOS,
+		FormFactor: protocol.FormDesktop,
+	}
+	address := fmt.Sprintf("%s:%d", peer.IP, peer.TCPPort)
+	result, err := transport.Dial(address, local, protocol.IntentTransfer, key, 8*time.Second)
+	if err != nil {
+		return nil, protocol.DeviceInfo{}, err
+	}
+	return result.Conn, result.Peer, nil
 }
 
 // LoadPluginSettings bridges each plugin's own settings shape from the
@@ -709,6 +628,12 @@ func (h pluginHost) LoadPluginSettings(id plugin.ID) []byte {
 		return data
 	case remoteinput.ID:
 		data, _ := json.Marshal(remoteinput.Settings{AllowControl: settings.AllowMediaControl})
+		return data
+	case files.ID:
+		data, _ := json.Marshal(files.Settings{
+			AutoAccept:  settings.AutoAcceptFiles,
+			DownloadDir: settings.DownloadDir,
+		})
 		return data
 	}
 	return nil
@@ -802,8 +727,6 @@ func (s *WeDropService) pushState() {
 		s.emit("state", s.GetState())
 	}()
 }
-
-func newTransferID() string { return uuid.NewString() }
 
 // shutdown tears everything down when the app really exits.
 func (s *WeDropService) shutdown(ctx context.Context) {

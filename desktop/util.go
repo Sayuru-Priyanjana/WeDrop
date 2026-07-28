@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"os"
 	"strings"
 
 	"wedrop/core/crypto"
@@ -10,14 +9,6 @@ import (
 
 func unmarshalJSON(data []byte, v interface{}) error {
 	return json.Unmarshal(data, v)
-}
-
-func statSize(path string) (int64, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return 0, err
-	}
-	return info.Size(), nil
 }
 
 func trimName(name string) string {

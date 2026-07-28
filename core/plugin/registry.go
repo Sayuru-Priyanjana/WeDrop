@@ -22,6 +22,9 @@ type Host interface {
 	// per-device trust permission a user sets per paired device.
 	Allows(deviceID string, capability string) bool
 	Emit(event Event)
+	ShowWindow()
+	Toast(level, message string)
+	DialTransfer(deviceID string) (TransferConn, protocol.DeviceInfo, error)
 	LoadPluginSettings(id ID) []byte
 	SavePluginSettings(id ID, data []byte) error
 }
@@ -271,6 +274,18 @@ func (a *pluginAPI) AllowsCapability(deviceID string, capability string) bool {
 
 func (a *pluginAPI) Emit(name string, payload interface{}) {
 	a.registry.host.Emit(Event{Plugin: a.id, Name: name, Payload: payload})
+}
+
+func (a *pluginAPI) ShowWindow() {
+	a.registry.host.ShowWindow()
+}
+
+func (a *pluginAPI) Toast(level, message string) {
+	a.registry.host.Toast(level, message)
+}
+
+func (a *pluginAPI) DialTransfer(deviceID string) (TransferConn, protocol.DeviceInfo, error) {
+	return a.registry.host.DialTransfer(deviceID)
 }
 
 func (a *pluginAPI) Settings() []byte {
