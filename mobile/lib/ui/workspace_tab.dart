@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 import 'package:uuid/uuid.dart';
 
 import '../core/app_service.dart';
@@ -67,31 +66,13 @@ const Map<String, IconData> kWorkspaceIcons = {
   'close': Icons.close_rounded,
 };
 
-/// A curated colour palette, not a raw colour wheel — every button reads as
-/// belonging to the same set instead of the user landing on an arbitrary hue.
-const List<Color> kWorkspacePalette = [
-  WeDropColors.brand,
-  WeDropColors.accent,
-  WeDropColors.success,
-  WeDropColors.warn,
-  WeDropColors.danger,
-  Color(0xFF29B6D8),
-  Color(0xFFFF8A5C),
-  Color(0xFFB868E0),
-];
-
-const Map<String, String> _kActionLabels = {
-  WorkspaceActionType.shortcut: 'Shortcut',
-  WorkspaceActionType.openApp: 'Open app',
-  WorkspaceActionType.openFolder: 'Open folder',
-  WorkspaceActionType.openUrl: 'Open website',
-  WorkspaceActionType.shellCommand: 'Shell command',
-};
-
-/// "Workspace": a per-device, per-layout arrangement of widgets — the
+/// "Widgets": a per-device, per-layout arrangement of widgets — the
 /// desktop-switcher, dynamic controls, minimized apps, and the user's own
 /// "My Workspace" buttons — each addable/removable/resizable, with multiple
 /// named layouts (e.g. "Programming", "Video editing") to switch between.
+/// This tab is the customize surface; the buttons and per-app controls
+/// themselves are authored entirely on the desktop (see the App Actions and
+/// My Buttons editors there) — the phone only arranges and runs them.
 class WorkspaceTab extends StatefulWidget {
   final AppService service;
   final DeviceView device;
@@ -103,7 +84,6 @@ class WorkspaceTab extends StatefulWidget {
 }
 
 class _WorkspaceTabState extends State<WorkspaceTab> {
-  late List<WorkspaceButton> _buttons;
   late List<WorkspaceLayout> _layouts;
   late WorkspaceLayout _layout;
 
@@ -112,62 +92,11 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
   @override
   void initState() {
     super.initState();
-    _buttons = widget.service.workspaceButtonsFor(_deviceId);
     _layouts = widget.service.workspaceLayoutsFor(_deviceId);
     _layout = widget.service.activeWorkspaceLayoutFor(_deviceId);
   }
 
-  void _persistButtons() => widget.service.saveWorkspaceButtons(_deviceId, _buttons);
   void _persistLayouts() => widget.service.saveWorkspaceLayouts(_deviceId, _layouts);
-
-  // ── My-buttons grid (unchanged behaviour, now just one widget among many) ──
-
-  void _onReorderButtons(int oldIndex, int newIndex) {
-    setState(() {
-      final item = _buttons.removeAt(oldIndex);
-      _buttons.insert(newIndex, item);
-    });
-    _persistButtons();
-  }
-
-  Future<void> _openButtonEditor({WorkspaceButton? existing}) async {
-    final result = await showModalBottomSheet<_WorkspaceEditResult>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _WorkspaceEditSheet(
-        existing: existing,
-        automationAllowed: widget.service.settings.allowAutomation,
-      ),
-    );
-    if (result == null || !mounted) return;
-
-    setState(() {
-      if (result.delete && existing != null) {
-        _buttons.removeWhere((b) => b.id == existing.id);
-      } else if (existing != null) {
-        final idx = _buttons.indexWhere((b) => b.id == existing.id);
-        if (idx != -1) _buttons[idx] = result.button!;
-      } else if (result.button != null) {
-        _buttons.add(result.button!);
-      }
-    });
-    _persistButtons();
-  }
-
-  void _runButton(WorkspaceButton button) {
-    final p = button.actionParams;
-    widget.service.sendWorkspaceAction(
-      _deviceId,
-      WorkspaceAction(
-        action: button.actionType,
-        modifiers: (p['modifiers'] as List?)?.cast<String>() ?? const [],
-        key: p['key'] as String? ?? '',
-        path: p['path'] as String? ?? '',
-        url: p['url'] as String? ?? '',
-        command: p['command'] as String? ?? '',
-      ),
-    );
-  }
 
   // ── Widget management (add/remove/resize/reorder within the layout) ──
 
@@ -328,17 +257,14 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
         builder: (_) => _WorkspaceFullScreen(
           service: widget.service,
           device: widget.device,
-          layout: _layout,
-          buttons: _buttons,
-          onReorderButtons: (oldIndex, newIndex) => setState(() => _onReorderButtons(oldIndex, newIndex)),
-          onRunButton: _runButton,
-          onEditButton: (b) => _openButtonEditor(existing: b),
-          onAddButton: () => _openButtonEditor(),
+          layouts: _layouts,
+          initialLayoutId: _layout.id,
+          onLayoutChanged: _switchLayout,
         ),
       ),
     );
-    // Buttons/layout mutations inside full screen happen on the same shared
-    // objects; refresh the tab once we're back to reflect them.
+    // Switching layouts inside full screen mutates the same shared _layouts
+    // list; refresh the tab once we're back to reflect it.
     if (mounted) setState(() {});
   }
 
@@ -361,11 +287,6 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
       service: widget.service,
       device: widget.device,
       layout: _layout,
-      buttons: _buttons,
-      onReorderButtons: _onReorderButtons,
-      onRunButton: _runButton,
-      onEditButton: (b) => _openButtonEditor(existing: b),
-      onAddButton: _openButtonEditor,
       onResizeWidget: _resizeWidget,
       onRemoveWidget: _removeWidget,
       onMoveWidget: _moveWidget,
@@ -383,18 +304,37 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
   }
 }
 
-/// The full body of the Workspace tab: a top bar (current layout name + add-
-/// widget + full-screen/exit), then every widget in the active layout in
-/// order, then the "My buttons" section filling remaining space.
+/// Opens a stripped-down, full-screen "run mode" for this device's active
+/// layout — used by the Overview tab's Workspace preview card. The only
+/// customization available here is picking a different saved layout; adding,
+/// resizing, or removing widgets (and editing button/app-action content)
+/// stays in the Widgets tab and the desktop app respectively.
+Future<void> openWorkspaceFullScreen(BuildContext context, AppService service, DeviceView device) {
+  final layouts = service.workspaceLayoutsFor(device.deviceId);
+  final activeId = service.activeWorkspaceLayoutFor(device.deviceId).id;
+  return Navigator.of(context).push(
+    MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => _WorkspaceFullScreen(
+        service: service,
+        device: device,
+        layouts: layouts,
+        initialLayoutId: activeId,
+        onLayoutChanged: (id) => service.setActiveWorkspaceLayout(device.deviceId, id),
+      ),
+    ),
+  );
+}
+
+/// The full body of the Workspace/Widgets tab: a top bar (current layout
+/// name + add-widget + full-screen/exit), then every widget in the active
+/// layout in order, then the "My buttons" section filling remaining space.
+/// Buttons and per-app dynamic controls are read live from [service] — both
+/// are desktop-authoritative, so there is nothing to cache locally.
 class _WorkspaceBody extends StatelessWidget {
   final AppService service;
   final DeviceView device;
   final WorkspaceLayout layout;
-  final List<WorkspaceButton> buttons;
-  final void Function(int, int) onReorderButtons;
-  final void Function(WorkspaceButton) onRunButton;
-  final Future<void> Function(WorkspaceButton) onEditButton;
-  final Future<void> Function() onAddButton;
   final void Function(WidgetInstance) onResizeWidget;
   final void Function(WidgetInstance) onRemoveWidget;
   final void Function(WidgetInstance, int) onMoveWidget;
@@ -408,11 +348,6 @@ class _WorkspaceBody extends StatelessWidget {
     required this.service,
     required this.device,
     required this.layout,
-    required this.buttons,
-    required this.onReorderButtons,
-    required this.onRunButton,
-    required this.onEditButton,
-    required this.onAddButton,
     required this.onResizeWidget,
     required this.onRemoveWidget,
     required this.onMoveWidget,
@@ -430,35 +365,54 @@ class _WorkspaceBody extends StatelessWidget {
     return null;
   }
 
-  Widget? _menuFor(WidgetInstance instance, {bool canResize = true}) {
-    if (!showWidgetMenus) return null;
-    return _WidgetMenu(
-      canResize: canResize,
-      isCompact: instance.size == WidgetSize.compact,
-      onResize: () => onResizeWidget(instance),
-      onRemove: () => onRemoveWidget(instance),
-      onMoveUp: () => onMoveWidget(instance, -1),
-      onMoveDown: () => onMoveWidget(instance, 1),
+  void _runButton(WorkspaceButtonDef button) => service.sendWorkspaceAction(device.deviceId, button.action);
+
+  Future<void> _openWidgetEditor(BuildContext context, WidgetInstance instance, {bool canResize = true}) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _WidgetEditorSheet(
+        title: WidgetType.labels[instance.type] ?? instance.type,
+        canResize: canResize,
+        isCompact: instance.size == WidgetSize.compact,
+        onResize: () => onResizeWidget(instance),
+        onRemove: () => onRemoveWidget(instance),
+        onMoveUp: () => onMoveWidget(instance, -1),
+        onMoveDown: () => onMoveWidget(instance, 1),
+        buttonsPreview: instance.type == WidgetType.buttons ? service.workspaceButtonsOf(device.deviceId) : null,
+        onConfigureButtons:
+            instance.type == WidgetType.buttons ? () => service.requestConfigureButtons(device.deviceId) : null,
+      ),
     );
   }
 
-  Widget _renderOther(WidgetInstance instance) {
+  Widget? _menuFor(BuildContext context, WidgetInstance instance, {bool canResize = true}) {
+    if (!showWidgetMenus) return null;
+    return IconButton(
+      tooltip: 'Edit widget',
+      visualDensity: VisualDensity.compact,
+      icon: const Icon(Icons.tune_rounded, size: 18, color: WeDropColors.inkFaint),
+      onPressed: () => _openWidgetEditor(context, instance, canResize: canResize),
+    );
+  }
+
+  Widget _renderOther(BuildContext context, WidgetInstance instance) {
     switch (instance.type) {
       case WidgetType.desktopSwitcher:
-        return _DesktopSwitcherCard(service: service, device: device, menu: _menuFor(instance));
+        return _DesktopSwitcherCard(service: service, device: device, menu: _menuFor(context, instance));
       case WidgetType.adaptiveControls:
         return _DynamicControlsCard(
           service: service,
           device: device,
           state: service.adaptiveControlsOf(device.deviceId),
-          menu: _menuFor(instance),
+          menu: _menuFor(context, instance),
         );
       case WidgetType.minimizedApps:
         return _MinimizedAppsCard(
           service: service,
           device: device,
           state: service.minimizedAppsOf(device.deviceId),
-          menu: _menuFor(instance),
+          menu: _menuFor(context, instance),
         );
     }
     return const SizedBox.shrink();
@@ -469,6 +423,7 @@ class _WorkspaceBody extends StatelessWidget {
     final sorted = [...layout.widgets]..sort((a, b) => a.order.compareTo(b.order));
     final others = sorted.where((w) => w.type != WidgetType.buttons).toList();
     final buttonsInstance = _find(WidgetType.buttons);
+    final buttons = service.workspaceButtonsOf(device.deviceId);
 
     final rows = <Widget>[];
     var i = 0;
@@ -483,15 +438,15 @@ class _WorkspaceBody extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: _renderOther(a)),
+              Expanded(child: _renderOther(context, a)),
               const SizedBox(width: Space.sm),
-              Expanded(child: _renderOther(b)),
+              Expanded(child: _renderOther(context, b)),
             ],
           ),
         ));
         i += 2;
       } else {
-        rows.add(Padding(padding: const EdgeInsets.only(bottom: Space.sm), child: _renderOther(a)));
+        rows.add(Padding(padding: const EdgeInsets.only(bottom: Space.sm), child: _renderOther(context, a)));
         i += 1;
       }
     }
@@ -559,16 +514,14 @@ class _WorkspaceBody extends StatelessWidget {
                                 buttons.isEmpty ? 'My buttons' : 'My buttons · ${buttons.length}',
                               ),
                             ),
-                            ?_menuFor(buttonsInstance, canResize: false),
+                            ?_menuFor(context, buttonsInstance, canResize: false),
                           ],
                         ),
                         Expanded(
                           child: _WorkspaceGrid(
                             buttons: buttons,
-                            onReorder: onReorderButtons,
-                            onRun: onRunButton,
-                            onEdit: onEditButton,
-                            onAdd: onAddButton,
+                            onRun: _runButton,
+                            onConfigure: () => service.requestConfigureButtons(device.deviceId),
                           ),
                         ),
                       ],
@@ -595,54 +548,135 @@ class _WorkspaceBody extends StatelessWidget {
   }
 }
 
-/// The "..." menu on every widget card: resize (full/compact), reorder
-/// (move up/down within the layout), and remove from the layout.
-class _WidgetMenu extends StatelessWidget {
+/// The sheet opened by tapping a widget's "tune" icon — combines resizing,
+/// reordering, and removing the widget with, for the My Buttons widget, a
+/// read-only preview of its content (editing that content is desktop-only).
+class _WidgetEditorSheet extends StatelessWidget {
+  final String title;
   final bool canResize;
   final bool isCompact;
   final VoidCallback onResize;
   final VoidCallback onRemove;
   final VoidCallback onMoveUp;
   final VoidCallback onMoveDown;
+  final List<WorkspaceButtonDef>? buttonsPreview;
+  final VoidCallback? onConfigureButtons;
 
-  const _WidgetMenu({
+  const _WidgetEditorSheet({
+    required this.title,
     required this.canResize,
     required this.isCompact,
     required this.onResize,
     required this.onRemove,
     required this.onMoveUp,
     required this.onMoveDown,
+    required this.buttonsPreview,
+    required this.onConfigureButtons,
   });
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
-      padding: EdgeInsets.zero,
-      icon: const Icon(Icons.more_vert_rounded, size: 18, color: WeDropColors.inkFaint),
-      onSelected: (value) {
-        switch (value) {
-          case 'resize':
-            onResize();
-          case 'up':
-            onMoveUp();
-          case 'down':
-            onMoveDown();
-          case 'remove':
-            onRemove();
-        }
-      },
-      itemBuilder: (context) => [
-        if (canResize)
-          PopupMenuItem(value: 'resize', child: Text(isCompact ? 'Make full width' : 'Make compact')),
-        const PopupMenuItem(value: 'up', child: Text('Move up')),
-        const PopupMenuItem(value: 'down', child: Text('Move down')),
-        const PopupMenuItem(value: 'remove', child: Text('Remove widget')),
-      ],
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(Space.lg, Space.lg, Space.lg, Space.lg + MediaQuery.of(context).viewInsets.bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: WeDropColors.ink)),
+            const SizedBox(height: Space.md),
+            if (canResize)
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Full width', style: TextStyle(color: WeDropColors.ink)),
+                subtitle: const Text('Off pairs this widget with another compact one',
+                    style: TextStyle(color: WeDropColors.inkFaint, fontSize: 12)),
+                value: !isCompact,
+                onChanged: (_) {
+                  Navigator.pop(context);
+                  onResize();
+                },
+              ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.arrow_upward_rounded, color: WeDropColors.inkDim),
+              title: const Text('Move up', style: TextStyle(color: WeDropColors.ink)),
+              onTap: () {
+                Navigator.pop(context);
+                onMoveUp();
+              },
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.arrow_downward_rounded, color: WeDropColors.inkDim),
+              title: const Text('Move down', style: TextStyle(color: WeDropColors.ink)),
+              onTap: () {
+                Navigator.pop(context);
+                onMoveDown();
+              },
+            ),
+            if (buttonsPreview != null) ...[
+              const SizedBox(height: Space.md),
+              const CardLabel('Buttons on this widget'),
+              if (buttonsPreview!.isEmpty)
+                onConfigureButtons != null
+                    ? _ConfigurePrompt(
+                        message: 'No buttons configured yet',
+                        onTap: () {
+                          Navigator.pop(context);
+                          onConfigureButtons!();
+                        },
+                        label: 'Add on desktop',
+                      )
+                    : const Text(
+                        'No buttons configured yet. Add them from the desktop\'s My Buttons editor.',
+                        style: TextStyle(color: WeDropColors.inkFaint, fontSize: 12.5),
+                      )
+              else
+                Wrap(
+                  spacing: Space.sm,
+                  runSpacing: Space.sm,
+                  children: [
+                    for (final b in buttonsPreview!)
+                      Chip(
+                        avatar: Icon(
+                          kWorkspaceIcons[b.icon] ?? Icons.bolt_rounded,
+                          size: 16,
+                          color: b.colorValue != 0 ? Color(b.colorValue) : WeDropColors.brandSoft,
+                        ),
+                        label: Text(b.label, style: const TextStyle(fontSize: 12)),
+                        backgroundColor: WeDropColors.surfaceHi,
+                        side: BorderSide.none,
+                      ),
+                  ],
+                ),
+              const SizedBox(height: Space.xs),
+              const Text(
+                'Edit these on the desktop\'s My Buttons window.',
+                style: TextStyle(color: WeDropColors.inkFaint, fontSize: 11.5, fontStyle: FontStyle.italic),
+              ),
+            ],
+            const SizedBox(height: Space.lg),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  onRemove();
+                },
+                style: OutlinedButton.styleFrom(foregroundColor: WeDropColors.danger),
+                child: const Text('Remove widget'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
 
-/// Picks, renames, deletes, or creates a named layout for this device.
+/// Picks, renames, deletes, or creates a named layout for this device — the
+/// full management sheet, used only from the Widgets tab's own top bar.
 class _LayoutPickerSheet extends StatefulWidget {
   final List<WorkspaceLayout> layouts;
   final String activeId;
@@ -736,52 +770,101 @@ class _LayoutPickerSheetState extends State<_LayoutPickerSheet> {
   }
 }
 
+/// A lightweight, select-only layout list — used from the full-screen "run
+/// mode" (Overview's Workspace preview card, and the Widgets tab's own
+/// full-screen button), where picking a layout is the only customization on
+/// offer; managing layouts (rename/delete/create) stays in the Widgets tab.
+class _LayoutSelectSheet extends StatelessWidget {
+  final List<WorkspaceLayout> layouts;
+  final String activeId;
+  const _LayoutSelectSheet({required this.layouts, required this.activeId});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(Space.lg, Space.lg, Space.lg, Space.sm),
+            child: Text('Choose a layout', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: WeDropColors.ink)),
+          ),
+          for (final layout in layouts)
+            ListTile(
+              leading: Icon(
+                layout.id == activeId ? Icons.check_circle_rounded : Icons.circle_outlined,
+                color: layout.id == activeId ? WeDropColors.brand : WeDropColors.inkFaint,
+              ),
+              title: Text(layout.name, style: const TextStyle(color: WeDropColors.ink)),
+              subtitle: Text('${layout.widgets.length} widget${layout.widgets.length == 1 ? '' : 's'}',
+                  style: const TextStyle(color: WeDropColors.inkFaint, fontSize: 12)),
+              onTap: () => Navigator.pop(context, layout.id),
+            ),
+          const SizedBox(height: Space.md),
+        ],
+      ),
+    );
+  }
+}
+
 /// Target width (dp) of one button tile including its share of the grid
 /// gutter — the responsive grid divides available width by this to pick a
 /// column count, so the tab reflows sensibly on rotation or on a tablet
 /// instead of a fixed 3 columns.
 const double _kTileTargetWidth = 78;
 
-/// The reorderable button grid, factored out so both the normal Workspace
-/// tab and the full-screen route render identically.
+/// The button grid — purely a display+trigger surface: buttons are authored
+/// on the desktop, so there is no add tile, no reorder, and no long-press
+/// editor here, only tap-to-run.
 class _WorkspaceGrid extends StatelessWidget {
-  final List<WorkspaceButton> buttons;
-  final void Function(int, int) onReorder;
-  final void Function(WorkspaceButton) onRun;
-  final Future<void> Function(WorkspaceButton) onEdit;
-  final Future<void> Function() onAdd;
+  final List<WorkspaceButtonDef> buttons;
+  final void Function(WorkspaceButtonDef) onRun;
+  final VoidCallback onConfigure;
 
-  const _WorkspaceGrid({
-    required this.buttons,
-    required this.onReorder,
-    required this.onRun,
-    required this.onEdit,
-    required this.onAdd,
-  });
+  const _WorkspaceGrid({required this.buttons, required this.onRun, required this.onConfigure});
 
   @override
   Widget build(BuildContext context) {
+    if (buttons.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(Space.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'No buttons configured yet.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12.5, color: WeDropColors.inkFaint, height: 1.4),
+              ),
+              const SizedBox(height: Space.sm),
+              _ConfigurePrompt(
+                message: 'No buttons set up yet',
+                onTap: onConfigure,
+                label: 'Add on desktop',
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = (constraints.maxWidth / _kTileTargetWidth).floor().clamp(4, 10);
-        return ReorderableGridView.count(
-          crossAxisCount: columns,
-          mainAxisSpacing: Space.xs,
-          crossAxisSpacing: Space.xs,
-          childAspectRatio: 0.92,
-          onReorder: onReorder,
-          footer: [
-            _AddButtonTile(key: const ValueKey('__workspace_add__'), onTap: onAdd),
-          ],
-          children: [
-            for (final button in buttons)
-              _WorkspaceButtonTile(
-                key: ValueKey(button.id),
-                button: button,
-                onTap: () => onRun(button),
-                onLongPress: () => onEdit(button),
-              ),
-          ],
+        return GridView.builder(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: Space.xs,
+            crossAxisSpacing: Space.xs,
+            childAspectRatio: 0.92,
+          ),
+          itemCount: buttons.length,
+          itemBuilder: (context, i) {
+            final button = buttons[i];
+            return _WorkspaceButtonTile(button: button, onTap: () => onRun(button));
+          },
         );
       },
     );
@@ -791,28 +874,22 @@ class _WorkspaceGrid extends StatelessWidget {
 /// A dedicated full-screen route rendering the entire active layout with no
 /// app bar, no other tabs, and the OS status/nav bars hidden — for propping
 /// the phone up next to a keyboard and using it as a standalone control
-/// surface. Layout switching and adding new widgets stay in the normal tab
-/// (setup tasks); full screen is a "run mode" — tap, resize, remove, and My
-/// buttons' own add/edit/reorder remain available, but no widget menus.
+/// surface. This is a "run mode": no widget menus, no add-widget store; the
+/// only customization on offer is picking a different saved layout (when
+/// more than one exists).
 class _WorkspaceFullScreen extends StatefulWidget {
   final AppService service;
   final DeviceView device;
-  final WorkspaceLayout layout;
-  final List<WorkspaceButton> buttons;
-  final void Function(int, int) onReorderButtons;
-  final void Function(WorkspaceButton) onRunButton;
-  final Future<void> Function(WorkspaceButton) onEditButton;
-  final Future<void> Function() onAddButton;
+  final List<WorkspaceLayout> layouts;
+  final String initialLayoutId;
+  final Future<void> Function(String layoutId) onLayoutChanged;
 
   const _WorkspaceFullScreen({
     required this.service,
     required this.device,
-    required this.layout,
-    required this.buttons,
-    required this.onReorderButtons,
-    required this.onRunButton,
-    required this.onEditButton,
-    required this.onAddButton,
+    required this.layouts,
+    required this.initialLayoutId,
+    required this.onLayoutChanged,
   });
 
   @override
@@ -820,9 +897,12 @@ class _WorkspaceFullScreen extends StatefulWidget {
 }
 
 class _WorkspaceFullScreenState extends State<_WorkspaceFullScreen> {
+  late WorkspaceLayout _layout;
+
   @override
   void initState() {
     super.initState();
+    _layout = widget.layouts.firstWhere((l) => l.id == widget.initialLayoutId, orElse: () => widget.layouts.first);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     // Explicitly allow both orientations while this surface is up, regardless
     // of whatever the rest of the app currently prefers — this is meant to be
@@ -832,23 +912,34 @@ class _WorkspaceFullScreenState extends State<_WorkspaceFullScreen> {
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
+    // This route is pushed via Navigator, outside DeviceScreen's own
+    // subtree — DeviceScreen's own service listener (which is what makes
+    // the Widgets tab pick up live Dynamic Controls/minimized-window/button
+    // updates) never reaches here, so without its own listener this surface
+    // would freeze on whatever was true the moment it opened.
+    widget.service.addListener(_onServiceChanged);
   }
 
   @override
   void dispose() {
+    widget.service.removeListener(_onServiceChanged);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations(const []);
     super.dispose();
   }
 
-  Future<void> _edit(WorkspaceButton b) async {
-    await widget.onEditButton(b);
+  void _onServiceChanged() {
     if (mounted) setState(() {});
   }
 
-  Future<void> _add() async {
-    await widget.onAddButton();
-    if (mounted) setState(() {});
+  Future<void> _pickLayout() async {
+    final id = await showModalBottomSheet<String>(
+      context: context,
+      builder: (_) => _LayoutSelectSheet(layouts: widget.layouts, activeId: _layout.id),
+    );
+    if (id == null || !mounted) return;
+    setState(() => _layout = widget.layouts.firstWhere((l) => l.id == id, orElse: () => _layout));
+    await widget.onLayoutChanged(id);
   }
 
   @override
@@ -861,18 +952,13 @@ class _WorkspaceFullScreenState extends State<_WorkspaceFullScreen> {
           child: _WorkspaceBody(
             service: widget.service,
             device: widget.device,
-            layout: widget.layout,
-            buttons: widget.buttons,
-            onReorderButtons: (oldIndex, newIndex) => setState(() => widget.onReorderButtons(oldIndex, newIndex)),
-            onRunButton: widget.onRunButton,
-            onEditButton: _edit,
-            onAddButton: _add,
+            layout: _layout,
             onResizeWidget: (_) {},
             onRemoveWidget: (_) {},
             onMoveWidget: (_, _) {},
             showWidgetMenus: false,
-            layoutName: widget.layout.name,
-            onOpenLayoutPicker: null,
+            layoutName: _layout.name,
+            onOpenLayoutPicker: widget.layouts.length > 1 ? _pickLayout : null,
             onOpenWidgetStore: null,
             topAction: IconButton(
               tooltip: 'Exit full screen',
@@ -967,6 +1053,11 @@ class _DynamicControlsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final controls = state?.controls ?? const [];
     final appName = state?.appName ?? '';
+    final exe = state?.exe ?? '';
+    // An app is focused but has no profile yet — offer to configure it,
+    // rather than showing nothing or (as before) the same nine generic
+    // buttons every unrecognized app used to get.
+    final needsConfigure = appName.isNotEmpty && controls.isEmpty && exe.isNotEmpty;
 
     return WdCard(
       child: Column(
@@ -988,7 +1079,12 @@ class _DynamicControlsCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          if (controls.isEmpty)
+          if (needsConfigure)
+            _ConfigurePrompt(
+              message: 'No buttons set up for $appName yet',
+              onTap: () => service.requestConfigureApp(device.deviceId, exe),
+            )
+          else if (controls.isEmpty)
             const Text('No recognized app is focused right now', style: TextStyle(fontSize: 12, color: WeDropColors.inkFaint))
           else
             LayoutBuilder(
@@ -1004,9 +1100,8 @@ class _DynamicControlsCard extends StatelessWidget {
                     for (final control in controls)
                       SizedBox(
                         width: tileWidth,
-                        child: WdActionTile(
-                          icon: kWorkspaceIcons[control.icon] ?? Icons.bolt_rounded,
-                          label: control.label,
+                        child: _DynamicControlTile(
+                          control: control,
                           onTap: () => service.sendWorkspaceAction(device.deviceId, control.action),
                         ),
                       ),
@@ -1015,6 +1110,82 @@ class _DynamicControlsCard extends StatelessWidget {
               },
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _ConfigurePrompt extends StatelessWidget {
+  final String message;
+  final VoidCallback onTap;
+  final String label;
+  const _ConfigurePrompt({required this.message, required this.onTap, this.label = 'Configure'});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: WeDropColors.surfaceHi,
+      borderRadius: BorderRadius.circular(Radii.control),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(Radii.control),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              const Icon(Icons.add_circle_outline_rounded, size: 18, color: WeDropColors.brandSoft),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  message,
+                  style: const TextStyle(fontSize: 12.5, color: WeDropColors.inkDim),
+                ),
+              ),
+              Text(label,
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: WeDropColors.brandSoft)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A Dynamic Controls tile honoring the control's own colour (set from the
+/// desktop's App Actions editor), matching _WorkspaceButtonTile's visual
+/// language rather than WdActionTile's single fixed accent.
+class _DynamicControlTile extends StatelessWidget {
+  final AdaptiveControl control;
+  final VoidCallback onTap;
+  const _DynamicControlTile({required this.control, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = control.color != 0 ? Color(control.color) : WeDropColors.accent;
+    final icon = kWorkspaceIcons[control.icon] ?? Icons.bolt_rounded;
+
+    return Material(
+      color: color.withValues(alpha: 0.14),
+      borderRadius: BorderRadius.circular(Radii.control),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(Radii.control),
+        onTap: onTap,
+        child: Container(
+          height: 52,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(Radii.control),
+            border: Border.all(color: color.withValues(alpha: 0.4)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(height: Space.xs),
+              Text(control.label, style: AppText.caption.copyWith(color: WeDropColors.ink)),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1110,20 +1281,14 @@ class _MinimizedChip extends StatelessWidget {
 }
 
 class _WorkspaceButtonTile extends StatelessWidget {
-  final WorkspaceButton button;
+  final WorkspaceButtonDef button;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
 
-  const _WorkspaceButtonTile({
-    super.key,
-    required this.button,
-    required this.onTap,
-    required this.onLongPress,
-  });
+  const _WorkspaceButtonTile({required this.button, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(button.colorValue);
+    final color = button.colorValue != 0 ? Color(button.colorValue) : WeDropColors.accent;
     final icon = kWorkspaceIcons[button.icon] ?? Icons.bolt_rounded;
 
     return Material(
@@ -1132,7 +1297,6 @@ class _WorkspaceButtonTile extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(Radii.control),
         onTap: onTap,
-        onLongPress: onLongPress,
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(Radii.control),
@@ -1160,322 +1324,5 @@ class _WorkspaceButtonTile extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _AddButtonTile extends StatelessWidget {
-  final VoidCallback onTap;
-  const _AddButtonTile({super.key, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(Radii.control),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(Radii.control),
-        onTap: onTap,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(Radii.control),
-            border: Border.all(color: WeDropColors.border),
-          ),
-          child: const Center(
-            child: Icon(Icons.add_rounded, color: WeDropColors.inkFaint, size: 20),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _WorkspaceEditResult {
-  final WorkspaceButton? button;
-  final bool delete;
-  const _WorkspaceEditResult({this.button, this.delete = false});
-}
-
-class _WorkspaceEditSheet extends StatefulWidget {
-  final WorkspaceButton? existing;
-  final bool automationAllowed;
-
-  const _WorkspaceEditSheet({this.existing, required this.automationAllowed});
-
-  @override
-  State<_WorkspaceEditSheet> createState() => _WorkspaceEditSheetState();
-}
-
-class _WorkspaceEditSheetState extends State<_WorkspaceEditSheet> {
-  late final TextEditingController _label;
-  late final TextEditingController _key;
-  late final TextEditingController _target; // path / url / command, depending on action type
-  late String _icon;
-  late int _color;
-  late String _actionType;
-  final Set<String> _modifiers = {};
-
-  @override
-  void initState() {
-    super.initState();
-    final existing = widget.existing;
-    final params = existing?.actionParams ?? const {};
-
-    _label = TextEditingController(text: existing?.label ?? '');
-    _icon = existing?.icon ?? kWorkspaceIcons.keys.first;
-    _color = existing?.colorValue ?? kWorkspacePalette.first.toARGB32();
-    _actionType = existing?.actionType ?? WorkspaceActionType.shortcut;
-    _modifiers.addAll((params['modifiers'] as List?)?.cast<String>() ?? const []);
-    _key = TextEditingController(text: params['key'] as String? ?? '');
-    _target = TextEditingController(
-      text: (params['path'] ?? params['url'] ?? params['command']) as String? ?? '',
-    );
-  }
-
-  @override
-  void dispose() {
-    _label.dispose();
-    _key.dispose();
-    _target.dispose();
-    super.dispose();
-  }
-
-  bool get _canSave {
-    if (_label.text.trim().isEmpty) return false;
-    switch (_actionType) {
-      case WorkspaceActionType.shortcut:
-        return _key.text.trim().isNotEmpty;
-      case WorkspaceActionType.shellCommand:
-        return widget.automationAllowed && _target.text.trim().isNotEmpty;
-      default:
-        return _target.text.trim().isNotEmpty;
-    }
-  }
-
-  Map<String, dynamic> get _actionParams {
-    switch (_actionType) {
-      case WorkspaceActionType.shortcut:
-        return {'modifiers': _modifiers.toList(), 'key': _key.text.trim()};
-      case WorkspaceActionType.openApp:
-      case WorkspaceActionType.openFolder:
-        return {'path': _target.text.trim()};
-      case WorkspaceActionType.openUrl:
-        return {'url': _target.text.trim()};
-      case WorkspaceActionType.shellCommand:
-        return {'command': _target.text.trim()};
-    }
-    return const {};
-  }
-
-  void _save() {
-    final button = WorkspaceButton(
-      id: widget.existing?.id ?? const Uuid().v4(),
-      label: _label.text.trim(),
-      icon: _icon,
-      colorValue: _color,
-      actionType: _actionType,
-      actionParams: _actionParams,
-      order: widget.existing?.order ?? 0,
-    );
-    Navigator.of(context).pop(_WorkspaceEditResult(button: button));
-  }
-
-  void _delete() => Navigator.of(context).pop(const _WorkspaceEditResult(delete: true));
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        Space.lg,
-        Space.lg,
-        Space.lg,
-        MediaQuery.of(context).viewInsets.bottom + Space.lg,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              widget.existing == null ? 'New button' : 'Edit button',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: WeDropColors.ink),
-            ),
-            const SizedBox(height: Space.lg),
-            TextField(
-              controller: _label,
-              decoration: const InputDecoration(labelText: 'Label'),
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: Space.lg),
-            const CardLabel('Icon'),
-            _iconPicker(),
-            const SizedBox(height: Space.lg),
-            const CardLabel('Colour'),
-            _colorPicker(),
-            const SizedBox(height: Space.lg),
-            const CardLabel('Action'),
-            _actionTypePicker(),
-            const SizedBox(height: Space.md),
-            _actionFields(),
-            const SizedBox(height: Space.xl),
-            Row(
-              children: [
-                if (widget.existing != null) ...[
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: _delete,
-                      style: OutlinedButton.styleFrom(foregroundColor: WeDropColors.danger),
-                      child: const Text('Delete'),
-                    ),
-                  ),
-                  const SizedBox(width: Space.md),
-                ],
-                Expanded(
-                  flex: 2,
-                  child: FilledButton(
-                    onPressed: _canSave ? _save : null,
-                    child: const Text('Save'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _iconPicker() {
-    return Wrap(
-      spacing: Space.xs,
-      runSpacing: Space.xs,
-      children: kWorkspaceIcons.entries.map((entry) {
-        final selected = entry.key == _icon;
-        return InkWell(
-          borderRadius: BorderRadius.circular(Radii.control),
-          onTap: () => setState(() => _icon = entry.key),
-          child: Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: selected ? WeDropColors.brand.withValues(alpha: 0.2) : WeDropColors.surfaceHi,
-              borderRadius: BorderRadius.circular(Radii.control),
-              border: selected ? Border.all(color: WeDropColors.brand) : null,
-            ),
-            child: Icon(entry.value, size: 16, color: selected ? WeDropColors.brandSoft : WeDropColors.inkDim),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _colorPicker() {
-    return Wrap(
-      spacing: Space.sm,
-      children: kWorkspacePalette.map((c) {
-        final value = c.toARGB32();
-        final selected = value == _color;
-        return InkWell(
-          borderRadius: BorderRadius.circular(Radii.pill),
-          onTap: () => setState(() => _color = value),
-          child: Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: c,
-              shape: BoxShape.circle,
-              border: selected ? Border.all(color: WeDropColors.ink, width: 2) : null,
-            ),
-            child: selected ? const Icon(Icons.check_rounded, color: Colors.white, size: 18) : null,
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _actionTypePicker() {
-    return Wrap(
-      spacing: Space.sm,
-      runSpacing: Space.sm,
-      children: _kActionLabels.entries.map((entry) {
-        return ChoiceChip(
-          label: Text(entry.value),
-          selected: entry.key == _actionType,
-          onSelected: (_) => setState(() => _actionType = entry.key),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _actionFields() {
-    switch (_actionType) {
-      case WorkspaceActionType.shortcut:
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Wrap(
-              spacing: Space.sm,
-              children: [Modifier.ctrl, Modifier.shift, Modifier.alt].map((m) {
-                final selected = _modifiers.contains(m);
-                return FilterChip(
-                  label: Text(m[0].toUpperCase() + m.substring(1)),
-                  selected: selected,
-                  onSelected: (v) => setState(() => v ? _modifiers.add(m) : _modifiers.remove(m)),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: Space.sm),
-            TextField(
-              controller: _key,
-              decoration: const InputDecoration(labelText: 'Key (e.g. P, Enter, Tab)'),
-              onChanged: (_) => setState(() {}),
-            ),
-          ],
-        );
-      case WorkspaceActionType.openApp:
-        return TextField(
-          controller: _target,
-          decoration: const InputDecoration(labelText: 'Application path'),
-          onChanged: (_) => setState(() {}),
-        );
-      case WorkspaceActionType.openFolder:
-        return TextField(
-          controller: _target,
-          decoration: const InputDecoration(labelText: 'Folder path'),
-          onChanged: (_) => setState(() {}),
-        );
-      case WorkspaceActionType.openUrl:
-        return TextField(
-          controller: _target,
-          decoration: const InputDecoration(labelText: 'Website URL'),
-          keyboardType: TextInputType.url,
-          onChanged: (_) => setState(() {}),
-        );
-      case WorkspaceActionType.shellCommand:
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (!widget.automationAllowed)
-              Container(
-                padding: const EdgeInsets.all(Space.md),
-                margin: const EdgeInsets.only(bottom: Space.sm),
-                decoration: BoxDecoration(
-                  color: WeDropColors.danger.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(Radii.control),
-                ),
-                child: const Text(
-                  'Shell commands are off. Turn on "Allow shell/script commands" in Settings to use this.',
-                  style: TextStyle(fontSize: 12, color: WeDropColors.danger),
-                ),
-              ),
-            TextField(
-              controller: _target,
-              enabled: widget.automationAllowed,
-              decoration: const InputDecoration(labelText: 'Command'),
-              onChanged: (_) => setState(() {}),
-            ),
-          ],
-        );
-    }
-    return const SizedBox.shrink();
   }
 }

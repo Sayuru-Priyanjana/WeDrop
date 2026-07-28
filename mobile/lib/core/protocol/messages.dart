@@ -37,6 +37,9 @@ class MsgType {
   static const workspaceAction = 'workspace_action';
   static const adaptiveControls = 'adaptive_controls';
   static const minimizedApps = 'minimized_apps';
+  static const configureApp = 'configure_app';
+  static const configureButtons = 'configure_buttons';
+  static const workspaceButtons = 'workspace_buttons';
 
   static const transferOffer = 'transfer_offer';
   static const transferAccept = 'transfer_accept';
@@ -621,12 +624,16 @@ class AdaptiveControl {
   /// Same curated icon-key vocabulary as WorkspaceButton.icon
   /// (ui/workspace_tab.dart's kWorkspaceIcons).
   final String icon;
+  /// ARGB, matching WorkspaceButton.colorValue's convention. 0 means "no
+  /// override" — the tile falls back to a default accent.
+  final int color;
   final WorkspaceAction action;
 
   const AdaptiveControl({
     required this.id,
     required this.label,
     required this.icon,
+    this.color = 0,
     required this.action,
   });
 
@@ -634,7 +641,71 @@ class AdaptiveControl {
         id: json['id'] as String? ?? '',
         label: json['label'] as String? ?? '',
         icon: json['icon'] as String? ?? '',
+        color: json['color'] as int? ?? 0,
         action: WorkspaceAction.fromJson((json['action'] as Map?)?.cast<String, dynamic>() ?? const {}),
+      );
+}
+
+/// Asks the peer to open its App Actions editor for [appName] — sent when
+/// the Dynamic Controls card offers "Configure this app" for an application
+/// with no defined profile yet.
+class ConfigureAppRequest {
+  final String appName;
+  const ConfigureAppRequest({required this.appName});
+
+  Map<String, dynamic> toJson() => {
+        'type': MsgType.configureApp,
+        'app_name': appName,
+      };
+}
+
+/// Asks the peer to open its My Buttons editor for this device — no payload
+/// needed beyond the type; the desktop identifies the device from whoever
+/// sent the message.
+class ConfigureButtonsRequest {
+  const ConfigureButtonsRequest();
+
+  Map<String, dynamic> toJson() => {'type': MsgType.configureButtons};
+}
+
+/// One of this device's own "My Workspace" buttons — authored entirely on
+/// the desktop (its App Actions / My Buttons editor, with a keyboard-capture
+/// shortcut recorder) and received here read-only. There is no editor for
+/// these on the phone; tapping one just runs [action].
+class WorkspaceButtonDef {
+  final String id;
+  final String label;
+  final String icon;
+  final int colorValue;
+  final WorkspaceAction action;
+
+  const WorkspaceButtonDef({
+    required this.id,
+    required this.label,
+    required this.icon,
+    this.colorValue = 0,
+    required this.action,
+  });
+
+  factory WorkspaceButtonDef.fromJson(Map<String, dynamic> json) => WorkspaceButtonDef(
+        id: json['id'] as String? ?? '',
+        label: json['label'] as String? ?? '',
+        icon: json['icon'] as String? ?? '',
+        colorValue: json['color_value'] as int? ?? 0,
+        action: WorkspaceAction.fromJson((json['action'] as Map?)?.cast<String, dynamic>() ?? const {}),
+      );
+}
+
+/// This device's whole "My Workspace" button list, sent whenever it changes
+/// on the desktop (and once when this device connects).
+class WorkspaceButtonsState {
+  final List<WorkspaceButtonDef> buttons;
+  const WorkspaceButtonsState({this.buttons = const []});
+
+  factory WorkspaceButtonsState.fromJson(Map<String, dynamic> json) => WorkspaceButtonsState(
+        buttons: ((json['buttons'] as List?) ?? const [])
+            .map((e) => WorkspaceButtonDef.fromJson(e as Map<String, dynamic>))
+            .toList(),
       );
 }
 
@@ -643,12 +714,17 @@ class AdaptiveControl {
 /// list (with [appName] empty) means no recognized app is currently focused.
 class AdaptiveControlsState {
   final String appName;
+  /// Raw, lowercased executable name — distinct from [appName] (a friendly
+  /// display name) — echoed back verbatim in a ConfigureAppRequest since a
+  /// display name cannot be reliably reversed into an exe name.
+  final String exe;
   final List<AdaptiveControl> controls;
 
-  const AdaptiveControlsState({this.appName = '', this.controls = const []});
+  const AdaptiveControlsState({this.appName = '', this.exe = '', this.controls = const []});
 
   factory AdaptiveControlsState.fromJson(Map<String, dynamic> json) => AdaptiveControlsState(
         appName: json['app_name'] as String? ?? '',
+        exe: json['exe'] as String? ?? '',
         controls: ((json['controls'] as List?) ?? const [])
             .map((e) => AdaptiveControl.fromJson(e as Map<String, dynamic>))
             .toList(),

@@ -1,3 +1,82 @@
+export namespace adaptivecontrols {
+	
+	export class AppAction {
+	    id: string;
+	    label: string;
+	    icon: string;
+	    color_value: number;
+	    predefined: boolean;
+	    action: protocol.WorkspaceAction;
+	
+	    static createFrom(source: any = {}) {
+	        return new AppAction(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.icon = source["icon"];
+	        this.color_value = source["color_value"];
+	        this.predefined = source["predefined"];
+	        this.action = this.convertValues(source["action"], protocol.WorkspaceAction);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class AppProfile {
+	    exe: string;
+	    display_name: string;
+	    actions: AppAction[];
+	
+	    static createFrom(source: any = {}) {
+	        return new AppProfile(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.exe = source["exe"];
+	        this.display_name = source["display_name"];
+	        this.actions = this.convertValues(source["actions"], AppAction);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace main {
 	
 	export class PairingPrompt {
@@ -371,6 +450,71 @@ export namespace protocol {
 	        this.selected_player = source["selected_player"];
 	        this.audio_devices = this.convertValues(source["audio_devices"], AudioDeviceSummary);
 	        this.app_volumes = this.convertValues(source["app_volumes"], AppVolumeSummary);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class WorkspaceAction {
+	    type: string;
+	    action: string;
+	    modifiers?: string[];
+	    key?: string;
+	    path?: string;
+	    url?: string;
+	    command?: string;
+	    window_id?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new WorkspaceAction(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.action = source["action"];
+	        this.modifiers = source["modifiers"];
+	        this.key = source["key"];
+	        this.path = source["path"];
+	        this.url = source["url"];
+	        this.command = source["command"];
+	        this.window_id = source["window_id"];
+	    }
+	}
+	export class WorkspaceButtonDef {
+	    id: string;
+	    label: string;
+	    icon: string;
+	    color_value: number;
+	    action: WorkspaceAction;
+	
+	    static createFrom(source: any = {}) {
+	        return new WorkspaceButtonDef(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.icon = source["icon"];
+	        this.color_value = source["color_value"];
+	        this.action = this.convertValues(source["action"], WorkspaceAction);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

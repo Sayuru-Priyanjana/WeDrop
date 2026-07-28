@@ -117,10 +117,10 @@ class _DeviceScreenState extends State<DeviceScreen> with SingleTickerProviderSt
           indicatorColor: WeDropColors.brand,
           tabs: const [
             Tab(text: 'Overview', icon: Icon(Icons.dashboard_rounded, size: 18)),
-            Tab(text: 'Workspace', icon: Icon(Icons.dashboard_customize_rounded, size: 18)),
+            Tab(text: 'Widgets', icon: Icon(Icons.widgets_rounded, size: 18)),
             Tab(text: 'Remote', icon: Icon(Icons.mouse_rounded, size: 18)),
             Tab(text: 'Present', icon: Icon(Icons.slideshow_rounded, size: 18)),
-         
+
           ],
         ),
       ),
@@ -134,11 +134,16 @@ class _DeviceScreenState extends State<DeviceScreen> with SingleTickerProviderSt
               // Only the tab bar itself switches tabs now.
               physics: const NeverScrollableScrollPhysics(),
               children: [
-                _OverviewTab(service: widget.service, device: device, health: health, media: media),
+                _OverviewTab(
+                  service: widget.service,
+                  device: device,
+                  health: health,
+                  media: media,
+                ),
                 WorkspaceTab(service: widget.service, device: device),
                 _RemoteTab(service: widget.service, device: device),
                 _PresentTab(service: widget.service, device: device)
-                
+
               ],
             ),
     );
@@ -202,10 +207,77 @@ class _OverviewTab extends StatelessWidget {
           showAdvanced: service.settings.showAdvancedFeatures,
         ),
         const SizedBox(height: 16),
+        if (device.allowWorkspace) ...[
+          _WorkspacePreviewCard(service: service, device: device),
+          const SizedBox(height: 16),
+        ],
         _MediaCard(service: service, device: device, media: media),
         const SizedBox(height: 16),
         _QuickActions(service: service, device: device),
       ],
+    );
+  }
+}
+
+/// A one-line summary of the active Workspace layout — tapping opens a
+/// stripped-down full-screen "run mode" (only a layout switcher, no
+/// customization), the same way Dynamic Controls used to live here before it
+/// moved into the widget framework. Full customization stays in the Widgets
+/// tab.
+class _WorkspacePreviewCard extends StatelessWidget {
+  final AppService service;
+  final DeviceView device;
+
+  const _WorkspacePreviewCard({required this.service, required this.device});
+
+  @override
+  Widget build(BuildContext context) {
+    final layout = service.activeWorkspaceLayoutFor(device.deviceId);
+    final count = layout.widgets.length;
+
+    return Material(
+      color: WeDropColors.surface,
+      borderRadius: BorderRadius.circular(Radii.card),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(Radii.card),
+        onTap: () => openWorkspaceFullScreen(context, service, device),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(Radii.card),
+            border: Border.all(color: WeDropColors.border),
+          ),
+          padding: const EdgeInsets.all(Space.lg),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: WeDropColors.brand.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(Radii.control),
+                ),
+                child: const Icon(Icons.dashboard_customize_rounded, size: 20, color: WeDropColors.brandSoft),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Workspace',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: WeDropColors.ink)),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${layout.name} · $count widget${count == 1 ? '' : 's'}',
+                      style: const TextStyle(fontSize: 12.5, color: WeDropColors.inkFaint),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: WeDropColors.inkFaint),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

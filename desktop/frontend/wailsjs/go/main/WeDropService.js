@@ -22,12 +22,24 @@ export function CopyToClipboard(arg1) {
   return window['go']['main']['WeDropService']['CopyToClipboard'](arg1);
 }
 
+export function DeleteAppActionProfile(arg1) {
+  return window['go']['main']['WeDropService']['DeleteAppActionProfile'](arg1);
+}
+
 export function GetDiagnostics() {
   return window['go']['main']['WeDropService']['GetDiagnostics']();
 }
 
 export function GetState() {
   return window['go']['main']['WeDropService']['GetState']();
+}
+
+export function GetWorkspaceButtons() {
+  return window['go']['main']['WeDropService']['GetWorkspaceButtons']();
+}
+
+export function ListAppActionProfiles() {
+  return window['go']['main']['WeDropService']['ListAppActionProfiles']();
 }
 
 export function MarkNotificationsRead() {
@@ -56,6 +68,14 @@ export function RespondToTransfer(arg1, arg2) {
 
 export function RevealFile(arg1) {
   return window['go']['main']['WeDropService']['RevealFile'](arg1);
+}
+
+export function SaveAppActionProfile(arg1) {
+  return window['go']['main']['WeDropService']['SaveAppActionProfile'](arg1);
+}
+
+export function SaveWorkspaceButtons(arg1) {
+  return window['go']['main']['WeDropService']['SaveWorkspaceButtons'](arg1);
 }
 
 export function SelectFiles() {

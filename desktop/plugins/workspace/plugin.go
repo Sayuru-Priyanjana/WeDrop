@@ -33,16 +33,25 @@ type Settings struct {
 
 // Plugin implements plugin.Plugin for running workspace button actions.
 type Plugin struct {
-	api plugin.API
+	api     plugin.API
+	buttons *ButtonStore
 }
 
-// New creates the workspace plugin.
-func New() *Plugin { return &Plugin{} }
+// New creates the workspace plugin. buttonsPath is where every paired
+// phone's desktop-authored "My Workspace" buttons are persisted (see
+// buttons_store.go) — plain JSON, matching adaptivecontrols' own store.
+func New(buttonsPath string) *Plugin {
+	return &Plugin{buttons: newButtonStore(buttonsPath)}
+}
+
+// Buttons exposes the button store to desktop/api.go's Wails-bound methods,
+// so the frontend's My Buttons editor can read and edit it directly.
+func (p *Plugin) Buttons() *ButtonStore { return p.buttons }
 
 func (p *Plugin) ID() plugin.ID { return ID }
 
 func (p *Plugin) MessageTypes() []protocol.MessageType {
-	return []protocol.MessageType{protocol.TypeWorkspaceAction}
+	return []protocol.MessageType{protocol.TypeWorkspaceAction, protocol.TypeConfigureButtons}
 }
 
 func (p *Plugin) Init(api plugin.API) error {
@@ -52,6 +61,17 @@ func (p *Plugin) Init(api plugin.API) error {
 
 func (p *Plugin) HandleMessage(from plugin.PeerRef, msgType protocol.MessageType, raw []byte) error {
 	if !p.api.Allows(from.DeviceID) {
+		return nil
+	}
+
+	if msgType == protocol.TypeConfigureButtons {
+		// Bring the desktop window to front and open the My Buttons editor —
+		// there is nothing to preselect (My Buttons, like App Actions, is an
+		// attribute of this desktop, not of whichever phone is asking), so
+		// no payload beyond the event name itself is needed. See
+		// pluginHost.Emit's workspace.ID case in desktop/service.go.
+		p.api.ShowWindow()
+		p.api.Emit("configure_buttons", nil)
 		return nil
 	}
 
@@ -71,10 +91,34 @@ func (p *Plugin) HandleMessage(from plugin.PeerRef, msgType protocol.MessageType
 	return nil
 }
 
-func (p *Plugin) OnPeerConnected(peer plugin.PeerRef) {}
-func (p *Plugin) OnPeerDisconnected(deviceID string)  {}
-func (p *Plugin) Start(ctx context.Context) error     { return nil }
-func (p *Plugin) Stop()                               {}
+// OnPeerConnected sends this peer the current button list immediately, so
+// it does not have to wait for the next edit to see what is already
+// configured — the same list every connected, permitted phone gets.
+func (p *Plugin) OnPeerConnected(peer plugin.PeerRef) {
+	p.sendButtonsTo(peer.DeviceID)
+}
+func (p *Plugin) OnPeerDisconnected(deviceID string) {}
+func (p *Plugin) Start(ctx context.Context) error    { return nil }
+func (p *Plugin) Stop()                              {}
+
+// PushButtons re-sends the current button list to every connected,
+// permitted phone — called from desktop/api.go's SaveWorkspaceButtons right
+// after an edit, so no one has to reconnect to see the change.
+func (p *Plugin) PushButtons() {
+	for _, peer := range p.api.ConnectedPeers() {
+		p.sendButtonsTo(peer.DeviceID)
+	}
+}
+
+func (p *Plugin) sendButtonsTo(deviceID string) {
+	if !p.api.Allows(deviceID) {
+		return
+	}
+	_ = p.api.Send(deviceID, protocol.WorkspaceButtonsState{
+		Type:    protocol.TypeWorkspaceButtons,
+		Buttons: p.buttons.Get(),
+	})
+}
 
 func (p *Plugin) settings() Settings {
 	var s Settings
