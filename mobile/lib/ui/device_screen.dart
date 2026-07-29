@@ -85,47 +85,46 @@ class _DeviceScreenState extends State<DeviceScreen>
           glyph: Icon(
             iconForFormFactor(device.formFactor),
             size: 20,
-            color: WeDropColors.brandSoft,
+            color: Colors.white,
           ),
           title: device.name,
+          titleFontSize: 16,
           subtitle: connected
               ? 'Connected'
               : device.online
               ? 'On the network'
               : 'Offline',
           subtitleColor: connected
-              ? WeDropColors.success
+              ? WeDropColors.brand
               : WeDropColors.inkFaint,
         ),
         actions: [
-          IconButton(
-            onPressed: device.online ? () => widget.onSendFiles(device) : null,
-            icon: const Icon(Icons.upload_rounded),
-            tooltip: 'Send files',
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: IconButton(
+              onPressed: device.online ? () => widget.onSendFiles(device) : null,
+              icon: const Icon(Icons.send_rounded),
+              tooltip: 'Send files',
+            ),
           ),
         ],
         bottom: TabBar(
           controller: _tabs,
-          labelColor: WeDropColors.brandSoft,
+          labelColor: Colors.white,
           unselectedLabelColor: WeDropColors.inkFaint,
-          indicatorColor: WeDropColors.brand,
+          indicatorColor: Colors.white,
+          labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          unselectedLabelStyle: const TextStyle(fontSize: 12),
           tabs: const [
-            Tab(
-              text: 'Overview',
-              icon: Icon(Icons.dashboard_rounded, size: 18),
-            ),
-            Tab(text: 'Widgets', icon: Icon(Icons.widgets_rounded, size: 18)),
-            Tab(text: 'Remote', icon: Icon(Icons.mouse_rounded, size: 18)),
-            Tab(text: 'Present', icon: Icon(Icons.slideshow_rounded, size: 18)),
+            Tab(text: 'Overview'),
+            Tab(text: 'Widgets'),
+            Tab(text: 'Remote'),
+            Tab(text: 'Present'),
           ],
         ),
       ),
       body: Stack(
         children: [
-          // Matches HomeShell's own backdrop so a pushed screen doesn't read
-          // flatter by comparison; the taller app bar here (it carries the
-          // tab bar) sits the glow a little lower than HomeShell's default.
-          const WdBackdropGlow(top: -80),
           !connected
               ? _DisconnectedNotice(device: device)
               : TabBarView(
@@ -227,64 +226,42 @@ class _WorkspacePreviewCard extends StatelessWidget {
     final layout = service.activeWorkspaceLayoutFor(device.deviceId);
     final count = layout.widgets.length;
 
-    return Material(
-      color: WeDropColors.surface,
-      borderRadius: BorderRadius.circular(Radii.card),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(Radii.card),
-        onTap: () => openWorkspaceFullScreen(context, service, device),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(Radii.card),
-            border: Border.all(color: WeDropColors.border),
+    return WdCard(
+      onTap: () => openWorkspaceFullScreen(context, service, device),
+      child: Row(
+        children: [
+          WdIconBadge(
+            icon: Icons.dashboard_customize_rounded,
+            colour: Colors.white,
+            size: 40,
+            tinted: true,
           ),
-          padding: const EdgeInsets.all(Space.lg),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: WeDropColors.brand.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(Radii.control),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Workspace',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: WeDropColors.ink,
+                  ),
                 ),
-                child: const Icon(
-                  Icons.dashboard_customize_rounded,
-                  size: 20,
-                  color: WeDropColors.brandSoft,
+                const SizedBox(height: 2),
+                Text(
+                  '${layout.name} · $count widget${count == 1 ? '' : 's'}',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: WeDropColors.inkFaint,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Workspace',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: WeDropColors.ink,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${layout.name} · $count widget${count == 1 ? '' : 's'}',
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        color: WeDropColors.inkFaint,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: WeDropColors.inkFaint,
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+          const Icon(Icons.chevron_right_rounded, color: WeDropColors.inkFaint),
+        ],
       ),
     );
   }
@@ -321,16 +298,19 @@ class _HealthGrid extends StatelessWidget {
           icon: _networkIcon(h?.networkType),
           label: 'Network',
           value: _networkLabel(h?.networkType),
+          accent: WeDropColors.info,
         ),
         _HealthTile(
           icon: Icons.memory_rounded,
           label: 'CPU',
           value: h == null || h.cpuPercent < 0 ? '—' : '${h.cpuPercent}%',
+          accent: WeDropColors.warn,
         ),
         _HealthTile(
           icon: Icons.sd_storage_rounded,
           label: 'Memory',
           value: h == null || h.memPercent < 0 ? '—' : '${h.memPercent}%',
+          accent: WeDropColors.accent,
         ),
       ],
     ];
@@ -352,7 +332,7 @@ class _HealthGrid extends StatelessWidget {
     if (level < 0) return WeDropColors.inkFaint;
     if (level <= 15) return WeDropColors.danger;
     if (level <= 35) return WeDropColors.warn;
-    return WeDropColors.success;
+    return WeDropColors.inkDim;
   }
 
   IconData _networkIcon(String? type) => switch (type) {
@@ -385,39 +365,46 @@ class _HealthTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return WdCard(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-      child: Row(
+    // A smaller radius and a stacked (icon-over-value-over-label) layout
+    // than WdCard's default — matching the reference's compact stat tile,
+    // which reads as a proper rounded square rather than a pill at this
+    // tile's height.
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.028),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: accent, size: 14),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: accent, size: 12),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
                   value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 12,
+                    fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: WeDropColors.ink,
                   ),
                 ),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 9,
-                    color: WeDropColors.inkFaint,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 1),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 9, color: WeDropColors.inkDim),
           ),
         ],
       ),
@@ -459,6 +446,7 @@ class _MediaCard extends StatelessWidget {
           CardTitle(
             icon: Icons.music_note_rounded,
             text: hasMedia ? (m.app.isEmpty ? 'Now playing' : m.app) : 'Media',
+            iconColor: Colors.white,
           ),
           const SizedBox(height: Space.md),
           if (hasMedia) ...[
@@ -466,7 +454,7 @@ class _MediaCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 if (m.artwork.isNotEmpty) ...[
-                  ArtworkThumbnail(base64: m.artwork, size: 52),
+                  ArtworkThumbnail(base64: m.artwork, size: 48, radius: 8),
                   const SizedBox(width: 12),
                 ],
                 Expanded(
@@ -526,9 +514,7 @@ class _MediaCard extends StatelessWidget {
             children: [
               _mediaBtn(Icons.skip_previous_rounded, MediaCommand.prev),
               _mediaBtn(
-                m?.playing == true
-                    ? Icons.pause_rounded
-                    : Icons.play_arrow_rounded,
+                m?.playing == true ? Icons.pause_rounded : Icons.play_arrow_rounded,
                 MediaCommand.playPause,
                 large: true,
               ),
@@ -536,7 +522,6 @@ class _MediaCard extends StatelessWidget {
             ],
           ),
           const Divider(height: 24),
-          // A volume row with its own progress feedback.
           _VolumeControl(
             service: service,
             device: device,
@@ -548,11 +533,26 @@ class _MediaCard extends StatelessWidget {
   }
 
   Widget _mediaBtn(IconData icon, String command, {bool large = false}) {
-    return IconButton(
-      onPressed: () => service.sendMediaCommand(device.deviceId, command),
-      icon: Icon(icon),
-      iconSize: large ? 34 : 26,
-      color: large ? WeDropColors.brandSoft : WeDropColors.inkDim,
+    if (!large) {
+      return IconButton(
+        onPressed: () => service.sendMediaCommand(device.deviceId, command),
+        icon: Icon(icon),
+        iconSize: 26,
+        color: WeDropColors.inkDim,
+      );
+    }
+    return Material(
+      color: Colors.white,
+      shape: const CircleBorder(),
+      child: InkWell(
+        onTap: () => service.sendMediaCommand(device.deviceId, command),
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Icon(icon, size: 25, color: Colors.black),
+        ),
+      ),
     );
   }
 }
@@ -613,7 +613,7 @@ class _SeekBarState extends State<_SeekBar> {
         child: const LinearProgressIndicator(
           minHeight: 4,
           backgroundColor: WeDropColors.border,
-          valueColor: AlwaysStoppedAnimation(WeDropColors.accent),
+          valueColor: AlwaysStoppedAnimation(Colors.white),
         ),
       );
     }
@@ -628,9 +628,9 @@ class _SeekBarState extends State<_SeekBar> {
             trackHeight: 3,
             thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-            activeTrackColor: WeDropColors.accent,
+            activeTrackColor: Colors.white,
             inactiveTrackColor: WeDropColors.border,
-            thumbColor: WeDropColors.accent,
+            thumbColor: Colors.white,
           ),
           child: Slider(
             min: 0,
@@ -733,9 +733,9 @@ class _VolumeControlState extends State<_VolumeControl> {
                     overlayShape: const RoundSliderOverlayShape(
                       overlayRadius: 15,
                     ),
-                    activeTrackColor: WeDropColors.brand,
+                    activeTrackColor: Colors.white,
                     inactiveTrackColor: WeDropColors.border,
-                    thumbColor: WeDropColors.brand,
+                    thumbColor: Colors.white,
                   ),
                   child: Slider(
                     min: 0,
@@ -796,14 +796,21 @@ class _QuickActions extends StatelessWidget {
                 }
               }
             },
-            icon: const Icon(Icons.content_paste_rounded, size: 18),
+            icon: const Icon(Icons.content_paste_rounded, size: 12),
             label: const Text('Send clipboard'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: WeDropColors.inkDim,
-              side: const BorderSide(color: WeDropColors.border),
-              padding: const EdgeInsets.symmetric(vertical: 14),
+              foregroundColor: WeDropColors.ink,
+              backgroundColor: Colors.white.withValues(alpha: 0.1),
+              side: BorderSide(
+                color: Colors.white.withValues(alpha: 0.15),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+              textStyle: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 10,
+              ),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(Radii.control),
+                borderRadius: BorderRadius.circular(6),
               ),
             ),
           ),
@@ -906,10 +913,14 @@ class _RemoteTabState extends State<_RemoteTab> {
               onPanEnd: (_) {
                 _last = null;
                 _flushMove();
+                _flushTimer?.cancel();
+                _flushTimer = null;
                 setState(() => _panActive = false);
               },
               onPanCancel: () {
                 _last = null;
+                _flushTimer?.cancel();
+                _flushTimer = null;
                 setState(() => _panActive = false);
               },
               // A single tap is a left click; the OS focus follows the cursor.
@@ -1133,6 +1144,9 @@ class _CursorSpeedControlState extends State<_CursorSpeedControl> {
             data: SliderTheme.of(context).copyWith(
               trackHeight: 2,
               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+              activeTrackColor: Colors.white,
+              inactiveTrackColor: WeDropColors.border,
+              thumbColor: Colors.white,
             ),
             child: Slider(
               min: 0.25,
@@ -1241,9 +1255,12 @@ class _PresentTabState extends State<_PresentTab> {
           ),
           const SizedBox(height: Space.md),
           Expanded(
-            child: Material(
-              color: WeDropColors.brand.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(Radii.card),
+            child: Container(
+              decoration: BoxDecoration(
+                color: WeDropColors.surface.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(Radii.card),
+                border: Border.all(color: WeDropColors.border),
+              ),
               child: _laserEnabled
                   ? GestureDetector(
                       onPanStart: (d) => _last = d.localPosition,
@@ -1260,21 +1277,28 @@ class _PresentTabState extends State<_PresentTab> {
                       onPanEnd: (_) {
                         _last = null;
                         _flushMove();
+                        _flushTimer?.cancel();
+                        _flushTimer = null;
                       },
-                      child: const Center(
+                      onPanCancel: () {
+                        _last = null;
+                        _flushTimer?.cancel();
+                        _flushTimer = null;
+                      },
+                      child: Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
                               Icons.gps_fixed_rounded,
                               size: 40,
-                              color: WeDropColors.brandSoft,
+                              color: Colors.white.withValues(alpha: 0.5),
                             ),
-                            SizedBox(height: Space.md),
+                            const SizedBox(height: Space.md),
                             Text(
                               'Drag to move the laser pointer',
                               style: TextStyle(
-                                color: WeDropColors.brandSoft,
+                                color: Colors.white.withValues(alpha: 0.5),
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -1285,20 +1309,20 @@ class _PresentTabState extends State<_PresentTab> {
                   : InkWell(
                       onTap: () => _present(InputAction.presentNext),
                       borderRadius: BorderRadius.circular(Radii.card),
-                      child: const Center(
+                      child: Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
                               Icons.ads_click_rounded,
                               size: 40,
-                              color: WeDropColors.brandSoft,
+                              color: Colors.white.withValues(alpha: 0.5),
                             ),
-                            SizedBox(height: Space.md),
+                            const SizedBox(height: Space.md),
                             Text(
                               'Tap anywhere for next slide',
                               style: TextStyle(
-                                color: WeDropColors.brandSoft,
+                                color: Colors.white.withValues(alpha: 0.5),
                                 fontWeight: FontWeight.w600,
                               ),
                             ),

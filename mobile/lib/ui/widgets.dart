@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
@@ -170,13 +171,15 @@ class WdAppBarTitle extends StatelessWidget {
   final String title;
   final String subtitle;
   final Color subtitleColor;
+  final double titleFontSize;
 
   const WdAppBarTitle({
     super.key,
     required this.glyph,
     required this.title,
     required this.subtitle,
-    this.subtitleColor = WeDropColors.inkFaint,
+    this.subtitleColor = WeDropColors.inkDim,
+    this.titleFontSize = 18,
   });
 
   @override
@@ -194,11 +197,20 @@ class WdAppBarTitle extends StatelessWidget {
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppText.sectionTitle,
+                style: TextStyle(
+                  fontSize: titleFontSize,
+                  fontWeight: FontWeight.w800,
+                  color: WeDropColors.ink,
+                  letterSpacing: -0.3,
+                ),
               ),
               Text(
                 subtitle,
-                style: AppText.meta.copyWith(color: subtitleColor),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: subtitleColor,
+                ),
               ),
             ],
           ),
@@ -224,19 +236,28 @@ class WdCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: WeDropColors.surface.withValues(alpha: 0.7),
+    // A beautiful glassmorphic overlay for a professional look
+    return ClipRRect(
       borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Material(
+          color: Colors.white.withValues(alpha: 0.035),
+          borderRadius: BorderRadius.circular(20),
+          child: InkWell(
+            onTap: onTap,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: borderColor ?? WeDropColors.border),
+            child: Container(
+              padding: padding,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: borderColor ?? Colors.white.withValues(alpha: 0.08),
+                ),
+              ),
+              child: child,
+            ),
           ),
-          child: child,
         ),
       ),
     );
@@ -269,20 +290,22 @@ class SectionHeader extends StatelessWidget {
                 Text(
                   title,
                   style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
                     color: WeDropColors.ink,
-                    letterSpacing: -0.2,
+                    letterSpacing: -0.4,
                   ),
                 ),
                 if (hint != null)
                   Padding(
-                    padding: const EdgeInsets.only(top: 2),
+                    padding: const EdgeInsets.only(top: 6),
                     child: Text(
                       hint!,
                       style: const TextStyle(
-                        fontSize: 12.5,
-                        color: WeDropColors.inkFaint,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                        color: WeDropColors.inkDim,
+                        height: 1.45,
                       ),
                     ),
                   ),
@@ -340,8 +363,8 @@ class CardTitle extends StatelessWidget {
     super.key,
     required this.icon,
     required this.text,
-    this.iconSize = 18,
-    this.fontSize = 12.5,
+    this.iconSize = 17,
+    this.fontSize = 13,
     this.iconColor = WeDropColors.accent,
   });
 
@@ -350,7 +373,7 @@ class CardTitle extends StatelessWidget {
     return Row(
       children: [
         Icon(icon, size: iconSize, color: iconColor),
-        const SizedBox(width: 8),
+        const SizedBox(width: 9),
         Expanded(
           child: Align(
             alignment: Alignment.centerLeft,
@@ -362,7 +385,7 @@ class CardTitle extends StatelessWidget {
                 maxLines: 1,
                 style: TextStyle(
                   fontSize: fontSize,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                   color: WeDropColors.inkDim,
                 ),
               ),
@@ -455,6 +478,11 @@ class WdIconBadge extends StatelessWidget {
   /// of [colour] — the "not active/not relevant" state.
   final bool tinted;
 
+  /// Overrides just the icon's colour, independent of [tinted] — for the
+  /// reference's device glyph, which keeps a neutral box always but tints
+  /// only the icon itself when the device is connected.
+  final Color? iconColor;
+
   const WdIconBadge({
     super.key,
     required this.icon,
@@ -462,6 +490,7 @@ class WdIconBadge extends StatelessWidget {
     this.size = 46,
     this.iconSize,
     this.tinted = false,
+    this.iconColor,
   });
 
   @override
@@ -484,7 +513,7 @@ class WdIconBadge extends StatelessWidget {
       child: Icon(
         icon,
         size: iconSize ?? size * 0.46,
-        color: tinted ? colour : WeDropColors.inkDim,
+        color: iconColor ?? (tinted ? colour : WeDropColors.inkDim),
       ),
     );
   }
@@ -499,9 +528,9 @@ class StatusDot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colour = switch (state) {
-      'connected' => WeDropColors.success,
-      'online' => WeDropColors.warn,
-      _ => WeDropColors.inkFaint.withValues(alpha: 0.6),
+      'connected' => WeDropColors.success, // Green
+      'online' => WeDropColors.warn, // Orange
+      _ => WeDropColors.ink, // White
     };
 
     return Container(
@@ -529,7 +558,7 @@ class WdBadge extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 11,
+          fontSize: 9,
           fontWeight: FontWeight.w600,
           color: colour,
         ),
@@ -554,16 +583,21 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 44),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: WeDropColors.border,
-          style: BorderStyle.solid,
-        ),
-      ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 44),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.02),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: WeDropColors.border,
+              style: BorderStyle.solid,
+            ),
+          ),
       child: Column(
         children: [
           Container(
@@ -580,7 +614,7 @@ class EmptyState extends StatelessWidget {
             title,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 14,
+              fontSize: 12,
               fontWeight: FontWeight.w500,
               color: WeDropColors.inkDim,
             ),
@@ -590,13 +624,15 @@ class EmptyState extends StatelessWidget {
             hint,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 12.5,
+              fontSize: 10.5,
               color: WeDropColors.inkFaint,
               height: 1.45,
             ),
           ),
           if (action != null) ...[const SizedBox(height: 18), action!],
         ],
+      ),
+        ),
       ),
     );
   }
@@ -693,7 +729,7 @@ class SettingTile extends StatelessWidget {
                 Text(
                   title,
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 12,
                     fontWeight: FontWeight.w500,
                     color: WeDropColors.ink,
                   ),
@@ -704,7 +740,7 @@ class SettingTile extends StatelessWidget {
                     child: Text(
                       description!,
                       style: const TextStyle(
-                        fontSize: 12.5,
+                        fontSize: 10.5,
                         color: WeDropColors.inkFaint,
                         height: 1.4,
                       ),
@@ -733,7 +769,7 @@ class VerificationCodeDisplay extends StatelessWidget {
         const Text(
           'VERIFICATION CODE',
           style: TextStyle(
-            fontSize: 11,
+            fontSize: 9,
             letterSpacing: 1.6,
             fontWeight: FontWeight.w600,
             color: WeDropColors.inkFaint,
@@ -799,7 +835,7 @@ class VerificationCodeDisplay extends StatelessWidget {
           'Only continue if the other device shows these same digits.',
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 10,
             color: WeDropColors.inkFaint,
             height: 1.4,
           ),

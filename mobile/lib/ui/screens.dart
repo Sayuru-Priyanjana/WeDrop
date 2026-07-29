@@ -30,27 +30,33 @@ class DevicesScreen extends StatelessWidget {
     final nearby = service.discoveredDevices;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, 100),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       children: [
-        SectionHeader(
-          title: 'My ecosystem',
-          hint: 'Devices that trust each other and sync automatically.',
-          trailing: paired.isEmpty
-              ? null
-              : WdBadge(
-                  '${paired.where((d) => d.connected).length} connected',
-                  colour: WeDropColors.success,
+        if (paired.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16, left: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'My ecosystem',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: WeDropColors.ink),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Trusted devices that sync automatically.',
+                        style: TextStyle(fontSize: 12, color: WeDropColors.inkDim.withValues(alpha: 0.5), height: 1.3),
+                      ),
+                    ],
+                  ),
                 ),
-        ),
-        if (paired.isEmpty)
-          const EmptyState(
-            icon: Icons.devices_rounded,
-            title: 'Your ecosystem is empty',
-            hint:
-                'Pair a device below and it will start sharing clipboard, files and '
-                'notifications straight away.',
-          )
-        else
+              ],
+            ),
+          ),
           ...paired.map(
             (device) => Padding(
               padding: const EdgeInsets.only(bottom: 12),
@@ -62,28 +68,84 @@ class DevicesScreen extends StatelessWidget {
               ),
             ),
           ),
+        ] else ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: WdCard(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              child: Column(
+                children: [
+                  Icon(Icons.devices_rounded, size: 48, color: WeDropColors.inkDim.withValues(alpha: 0.5)),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'No devices paired',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: WeDropColors.inkDim),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Pair a device below to start syncing files and clipboards.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: WeDropColors.inkDim.withValues(alpha: 0.5), height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
 
-        const SizedBox(height: 28),
-        const SectionHeader(
-          title: 'Nearby',
-          hint: 'Other devices running WeDrop on this network.',
+        if (nearby.isNotEmpty || paired.isNotEmpty) const SizedBox(height: 24),
+        
+        Padding(
+          padding: const EdgeInsets.only(bottom: 16, left: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Nearby',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: WeDropColors.ink),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Other devices running WeDrop on this network.',
+                style: TextStyle(fontSize: 12, color: WeDropColors.inkDim.withValues(alpha: 0.5), height: 1.3),
+              ),
+            ],
+          ),
         ),
+        
         if (nearby.isEmpty)
-          const EmptyState(
-            icon: Icons.radar_rounded,
-            title: 'Nothing new nearby',
-            hint:
-                'Open WeDrop on your other devices and check they are on the same Wi-Fi.',
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: WdCard(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              child: Column(
+                children: [
+                  Icon(Icons.wifi_tethering_rounded, size: 48, color: WeDropColors.inkDim.withValues(alpha: 0.5)),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Nothing new nearby',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: WeDropColors.inkDim),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Open WeDrop on your other devices\nand make sure they share this Wi-Fi.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 12, color: WeDropColors.inkDim.withValues(alpha: 0.5), height: 1.4),
+                  ),
+                ],
+              ),
+            ),
           )
         else
           ...nearby.map(
             (device) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.only(bottom: 8),
               child: WdCard(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 child: Row(
                   children: [
-                    WdIconBadge(icon: iconForFormFactor(device.formFactor)),
-                    const SizedBox(width: 14),
+                    Icon(iconForFormFactor(device.formFactor), size: 18, color: WeDropColors.inkDim),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,39 +154,23 @@ class DevicesScreen extends StatelessWidget {
                             device.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w600,
-                              color: WeDropColors.ink,
-                            ),
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: WeDropColors.ink),
                           ),
-                          const SizedBox(height: 2),
                           Text(
                             '${device.platform} · ${device.ip}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: WeDropColors.inkFaint,
-                            ),
+                            style: const TextStyle(fontSize: 11, color: WeDropColors.inkFaint),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 10),
                     FilledButton(
-                      onPressed: pairingWith == device.deviceId
-                          ? null
-                          : () => onPair(device.deviceId),
+                      onPressed: pairingWith == device.deviceId ? null : () => onPair(device.deviceId),
                       style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                        minimumSize: const Size(60, 28),
+                        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                       ),
-                      child: Text(
-                        pairingWith == device.deviceId ? 'Waiting…' : 'Pair',
-                      ),
+                      child: Text(pairingWith == device.deviceId ? 'Wait' : 'Pair'),
                     ),
                   ],
                 ),
@@ -153,7 +199,9 @@ class _BatteryPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: colour.withValues(alpha: 0.14),
+        // Neutral pill background regardless of level — only the icon/text
+        // carry the battery colour, matching the reference exactly.
+        color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(Radii.pill),
       ),
       child: Row(
@@ -204,178 +252,106 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
   @override
   Widget build(BuildContext context) {
     final device = widget.device;
-    // Battery comes from the peer's health broadcast, shown as a pill on the card.
     final health = widget.service.healthOf(device.deviceId);
     final battery = device.connected ? (health?.battery ?? -1) : -1;
     final charging = health?.charging ?? false;
-    final status = device.connected
-        ? 'connected'
-        : device.online
-        ? 'online'
-        : 'offline';
-    final statusLabel = device.connected
-        ? 'Connected'
-        : device.online
-        ? 'On the network'
-        : device.lastSeen > 0
-        ? 'Last seen ${timeAgo(device.lastSeen)}'
-        : 'Offline';
+    final status = device.connected ? 'connected' : device.online ? 'online' : 'offline';
+    final statusLabel = device.connected ? 'Connected' : device.online ? 'On network' : device.lastSeen > 0 ? 'Seen ${timeAgo(device.lastSeen)}' : 'Offline';
 
     return WdCard(
       padding: EdgeInsets.zero,
-      borderColor: device.connected
-          ? WeDropColors.success.withValues(alpha: 0.25)
-          : WeDropColors.border,
+      borderColor: device.connected ? Colors.white.withValues(alpha: 0.1) : WeDropColors.border,
       child: Column(
         children: [
-          // Tapping the header opens the full remote-control screen.
           InkWell(
             onTap: device.connected ? widget.onOpen : null,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(Radii.card),
-            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(Radii.card)),
             child: Padding(
-              padding: const EdgeInsets.all(Space.lg),
-              child: Row(
+              padding: const EdgeInsets.all(16),
+              child: Column(
                 children: [
-                  WdIconBadge(
-                    icon: iconForFormFactor(device.formFactor),
-                    colour: WeDropColors.success,
-                    tinted: device.connected,
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                device.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  color: WeDropColors.ink,
-                                ),
-                              ),
-                            ),
-                            if (battery >= 0) ...[
-                              const SizedBox(width: 8),
-                              _BatteryPill(level: battery, charging: charging),
-                            ],
-                          ],
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: WeDropColors.surfaceHi,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: WeDropColors.border, width: 1),
                         ),
-                        const SizedBox(height: 4),
-                        Row(
+                        child: Icon(iconForFormFactor(device.formFactor), size: 20, color: device.connected ? WeDropColors.ink : WeDropColors.inkDim),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            StatusDot(status),
-                            const SizedBox(width: 7),
-                            Expanded(
-                              child: Text(
-                                '${device.platform} · $statusLabel',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 12.5,
-                                  color: WeDropColors.inkFaint,
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(device.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: WeDropColors.ink)),
                                 ),
-                              ),
+                                if (battery >= 0) ...[
+                                  const SizedBox(width: 8),
+                                  _BatteryPill(level: battery, charging: charging),
+                                ],
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                StatusDot(status),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text('${device.platform} · $statusLabel', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: WeDropColors.inkDim)),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (device.online)
+                        _compactDeviceAction(Icons.send_rounded, WeDropColors.brand, WeDropColors.brand.withValues(alpha: 0.15), widget.onSendFiles),
+                      const SizedBox(width: 8),
+                      _compactDeviceAction(Icons.close_rounded, WeDropColors.danger, WeDropColors.danger.withValues(alpha: 0.15), () => _confirmUnpair(context)),
+                    ],
                   ),
-                  IconButton(
-                    onPressed: device.online ? widget.onSendFiles : null,
-                    icon: const Icon(Icons.upload_rounded),
-                    color: WeDropColors.brandSoft,
-                    tooltip: device.online ? 'Send files' : 'Device is offline',
-                  ),
-                  IconButton(
-                    onPressed: () => _confirmUnpair(context),
-                    icon: const Icon(Icons.link_off_rounded),
-                    color: WeDropColors.danger,
-                    tooltip: 'Remove from ecosystem',
-                  ),
+                  if (device.connected) ...[
+                    const SizedBox(height: 12),
+                    _buildMediaRow(),
+                  ],
                 ],
               ),
             ),
           ),
-
-          // The media remote is only useful while a session is actually live.
-          if (device.connected && device.allowMedia) ...[
-            const Divider(height: 1),
-            _buildMediaSection(),
-          ],
-
           const Divider(height: 1),
           InkWell(
             onTap: () => setState(() => _expanded = !_expanded),
-            borderRadius: const BorderRadius.vertical(
-              bottom: Radius.circular(Radii.card),
-            ),
+            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(Radii.card)),
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: Space.lg,
-                vertical: 11,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
                 children: [
                   const Expanded(
-                    child: Text(
-                      'What this device may do',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        color: WeDropColors.inkFaint,
-                      ),
-                    ),
+                    child: Text('What this device can do', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: WeDropColors.ink)),
                   ),
-                  Icon(
-                    _expanded
-                        ? Icons.expand_less_rounded
-                        : Icons.expand_more_rounded,
-                    size: 20,
-                    color: WeDropColors.inkFaint,
-                  ),
+                  Icon(_expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded, size: 20, color: WeDropColors.inkDim),
                 ],
               ),
             ),
           ),
-
           if (_expanded)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: Column(
                 children: [
-                  _permission(
-                    'Share clipboard',
-                    Capability.clipboard,
-                    device.allowClipboard,
-                  ),
-                  _permission(
-                    'Send me files',
-                    Capability.files,
-                    device.allowFiles,
-                  ),
-                  _permission(
-                    'Mirror notifications',
-                    Capability.notifications,
-                    device.allowNotifications,
-                  ),
-                  _permission(
-                    'Control my media',
-                    Capability.media,
-                    device.allowMedia,
-                  ),
-                  _permission(
-                    'Run workspace actions',
-                    Capability.workspace,
-                    device.allowWorkspace,
-                  ),
+                  _permission('Share clipboard', Capability.clipboard, device.allowClipboard),
+                  _permission('Send me files', Capability.files, device.allowFiles),
+                  _permission('Mirror notifications', Capability.notifications, device.allowNotifications),
+                  _permission('Control my media', Capability.media, device.allowMedia),
+                  _permission('Run workspace actions', Capability.workspace, device.allowWorkspace),
                 ],
               ),
             ),
@@ -384,118 +360,94 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
     );
   }
 
-  Widget _mediaButton(IconData icon, String command) {
-    return IconButton(
-      onPressed: () =>
-          widget.service.sendMediaCommand(widget.device.deviceId, command),
-      icon: Icon(icon),
-      color: WeDropColors.inkDim,
-      iconSize: 22,
-    );
-  }
-
-  /// Title, artist and a live progress bar when the peer reports something
-  /// playing, plus the transport row underneath — always available so the
-  /// card still doubles as a basic remote even with nothing detected.
-  Widget _buildMediaSection() {
-    final media = widget.service.interpolatedMediaOf(widget.device.deviceId);
-    final hasMedia = media != null && media.hasMedia;
-    final known = hasMedia && media.position >= 0 && media.duration > 0;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (hasMedia) ...[
-            Row(
-              children: [
-                if (media.artwork.isNotEmpty) ...[
-                  ArtworkThumbnail(base64: media.artwork, size: 32, radius: 7),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: Text(
-                    media.title.isEmpty ? 'Unknown track' : media.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600,
-                      color: WeDropColors.ink,
-                    ),
-                  ),
-                ),
-                if (media.artist.isNotEmpty) ...[
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      media.artist,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: WeDropColors.inkFaint,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            const SizedBox(height: 6),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(Radii.pill),
-              child: LinearProgressIndicator(
-                value: known
-                    ? (media.position / media.duration).clamp(0.0, 1.0)
-                    : null,
-                minHeight: 3,
-                backgroundColor: WeDropColors.border,
-                valueColor: const AlwaysStoppedAnimation(WeDropColors.accent),
-              ),
-            ),
-            const SizedBox(height: 6),
-          ],
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _mediaButton(Icons.skip_previous_rounded, MediaCommand.prev),
-              _mediaButton(
-                media?.playing == true
-                    ? Icons.pause_rounded
-                    : Icons.play_arrow_rounded,
-                MediaCommand.playPause,
-              ),
-              _mediaButton(Icons.skip_next_rounded, MediaCommand.next),
-              _mediaButton(Icons.volume_down_rounded, MediaCommand.volDown),
-              _mediaButton(Icons.volume_up_rounded, MediaCommand.volUp),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _permission(String label, String capability, bool value) {
+  Widget _permission(String label, String capability, bool allowed) {
     return SizedBox(
-      height: 42,
+      height: 32,
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 13, color: WeDropColors.inkDim),
-            ),
+            child: Text(label, style: const TextStyle(fontSize: 12, color: WeDropColors.ink)),
           ),
-          Switch(
-            value: value,
-            onChanged: (next) => widget.service.setPermission(
-              widget.device.deviceId,
-              capability,
-              next,
+          Transform.scale(
+            scale: 0.7,
+            child: Switch(
+              value: allowed,
+              onChanged: (value) => widget.service.setPermission(widget.device.deviceId, capability, value),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+
+
+  Widget _mediaButton(IconData icon, String command, {bool primary = false}) {
+    return IconButton(
+      onPressed: () => widget.service.sendMediaCommand(widget.device.deviceId, command),
+      icon: Icon(icon),
+      color: primary ? WeDropColors.ink : WeDropColors.inkDim,
+      iconSize: primary ? 20 : 16,
+      constraints: const BoxConstraints(),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+    );
+  }
+
+  Widget _buildMediaRow() {
+    final media = widget.device.allowMedia ? widget.service.interpolatedMediaOf(widget.device.deviceId) : null;
+    if (media == null || !media.hasMedia) return const SizedBox.shrink();
+
+    final known = media.position >= 0 && media.duration > 0;
+
+    return Row(
+      children: [
+        if (media.artwork.isNotEmpty) ...[
+          ArtworkThumbnail(base64: media.artwork, size: 28, radius: 4),
+          const SizedBox(width: 8),
+        ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                media.title.isEmpty ? 'Unknown' : media.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: WeDropColors.ink),
+              ),
+              const SizedBox(height: 4),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(Radii.pill),
+                child: LinearProgressIndicator(
+                  value: known ? (media.position / media.duration).clamp(0.0, 1.0) : null,
+                  minHeight: 2,
+                  backgroundColor: WeDropColors.border,
+                  valueColor: const AlwaysStoppedAnimation(WeDropColors.ink),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        _mediaButton(Icons.skip_previous_rounded, MediaCommand.prev),
+        _mediaButton(media.playing ? Icons.pause_rounded : Icons.play_arrow_rounded, MediaCommand.playPause, primary: true),
+        _mediaButton(Icons.skip_next_rounded, MediaCommand.next),
+      ],
+    );
+  }
+
+  Widget _compactDeviceAction(IconData icon, Color color, Color bg, VoidCallback onTap) {
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
+      child: IconButton(
+        icon: Icon(icon),
+        color: color,
+        iconSize: 14,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(),
+        onPressed: onTap,
       ),
     );
   }
@@ -559,7 +511,7 @@ class TransfersScreen extends StatelessWidget {
             : 0.0;
 
         final (label, colour) = switch (transfer.status) {
-          TransferStatus.completed => ('Done', WeDropColors.success),
+          TransferStatus.completed => ('Done', WeDropColors.inkDim),
           TransferStatus.failed => ('Failed', WeDropColors.danger),
           TransferStatus.declined => ('Declined', WeDropColors.warn),
           TransferStatus.pending => ('Waiting', WeDropColors.brandSoft),

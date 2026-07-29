@@ -1,25 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// WeDrop's palette, kept deliberately in step with the desktop app so the two
-/// read as one product.
+/// read as one product. This is the "black & clean" direction — a true
+/// near-black background with muted, low-saturation accents, extracted from
+/// the project's own design reference.
 class WeDropColors {
-  static const bg = Color(0xFF080B14);
-  static const bgSoft = Color(0xFF0D1220);
-  static const surface = Color(0xFF121829);
-  static const surfaceHi = Color(0xFF1A2236);
-  static const border = Color(0xFF232C45);
-  static const borderHi = Color(0xFF2F3A58);
+  static const bg = Color(0xFF121212); // Deep Charcoal (Material Dark)
+  static const bgSoft = Color(0xFF181818); 
+  static const surface = Color(0xFF242424); // Elevated surface
+  static const surfaceHi = Color(0xFF333333); // Higher elevated surface
+  static const border = Color(0xFF333333); // Subtle border
+  static const borderHi = Color(0xFF4F4F4F); // Visible border
 
-  static const brand = Color(0xFF4F7CFF);
-  static const brandSoft = Color(0xFF6D92FF);
-  static const accent = Color(0xFF9B6BFF);
-  static const success = Color(0xFF2FCE8F);
-  static const warn = Color(0xFFF2B544);
-  static const danger = Color(0xFFF2555A);
+  static const brand = Color(0xFF10B981); // Emerald Green Accent
+  static const brandSoft = Color(0xFF34D399); // Lighter Green
+  static const accent = Color(0xFF10B981); 
+  static const success = Color(0xFF10B981); // Emerald Green (Online/Battery)
+  static const warn = Color(0xFFF59E0B); // Amber
+  static const danger = Color(0xFFEF4444); // Red
+  static const info = Color(0xFFFFFFFF); // White
 
-  static const ink = Color(0xFFEEF2FF);
-  static const inkDim = Color(0xFF9AA6C4);
-  static const inkFaint = Color(0xFF6B7699);
+  static const ink = Color(0xFFFFFFFF); // Pure White Text
+  static const inkDim = Color(0xFFE0E0E0); // Bright Grey Text (High Contrast)
+  static const inkFaint = Color(0xFFBDBDBD); // Light Grey Text (Visible)
 }
 
 /// Spacing on a 4pt grid. Using these instead of ad-hoc numbers is what keeps
@@ -47,7 +51,7 @@ class Radii {
 class AppText {
   /// Card and row headings.
   static const title = TextStyle(
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: FontWeight.w600,
     color: WeDropColors.ink,
     letterSpacing: -0.1,
@@ -56,25 +60,25 @@ class AppText {
   /// The small uppercase heading that labels a section *inside* a card, as
   /// opposed to [SectionHeader], which titles a whole page section.
   static const eyebrow = TextStyle(
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: FontWeight.w600,
     color: WeDropColors.inkFaint,
     letterSpacing: 0.8,
   );
 
   /// Default reading size for list rows and primary values.
-  static const body = TextStyle(fontSize: 14, color: WeDropColors.ink);
+  static const body = TextStyle(fontSize: 12, color: WeDropColors.ink);
 
   /// Secondary text: subtitles, supporting detail.
-  static const label = TextStyle(fontSize: 13, color: WeDropColors.inkDim);
+  static const label = TextStyle(fontSize: 11, color: WeDropColors.inkDim);
 
   /// Tertiary text: timestamps, hints, units.
-  static const caption = TextStyle(fontSize: 12, color: WeDropColors.inkFaint);
+  static const caption = TextStyle(fontSize: 10, color: WeDropColors.inkFaint);
 
   /// Numeric readouts (timers, percentages) — tabular figures stop the text
   /// jittering horizontally as the digits tick over.
   static const numeric = TextStyle(
-    fontSize: 12,
+    fontSize: 10,
     color: WeDropColors.inkFaint,
     fontFeatures: [FontFeature.tabularFigures()],
   );
@@ -92,7 +96,7 @@ class AppText {
   /// subtitle) — reads slightly more present than [caption], for text
   /// that's secondary but not merely a hint.
   static const meta = TextStyle(
-    fontSize: 11.5,
+    fontSize: 9.5,
     fontWeight: FontWeight.w400,
     color: WeDropColors.inkFaint,
   );
@@ -115,6 +119,10 @@ ThemeData buildWeDropTheme() {
     scaffoldBackgroundColor: WeDropColors.bg,
     canvasColor: WeDropColors.bg,
     splashFactory: InkSparkle.splashFactory,
+    // The one place the app sets its display face — every AppText style and
+    // inline TextStyle in the codebase omits fontFamily, so this cascades to
+    // all of them through DefaultTextStyle merging.
+    fontFamily: GoogleFonts.plusJakartaSans().fontFamily,
     appBarTheme: const AppBarTheme(
       backgroundColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
@@ -150,7 +158,7 @@ ThemeData buildWeDropTheme() {
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+        textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
@@ -205,16 +213,18 @@ ThemeData buildWeDropTheme() {
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: WeDropColors.bgSoft,
+      // The reference keeps the nav bar the same solid near-black as the
+      // screen itself, not a step lighter.
+      backgroundColor: WeDropColors.bg,
       surfaceTintColor: Colors.transparent,
-      indicatorColor: WeDropColors.brand.withValues(alpha: 0.16),
+      indicatorColor: Colors.white,
       height: 68,
       labelTextStyle: WidgetStateProperty.resolveWith(
         (states) => TextStyle(
-          fontSize: 11.5,
+          fontSize: 9.5,
           fontWeight: FontWeight.w500,
           color: states.contains(WidgetState.selected)
-              ? WeDropColors.brandSoft
+              ? Colors.white
               : WeDropColors.inkFaint,
         ),
       ),
@@ -222,7 +232,7 @@ ThemeData buildWeDropTheme() {
         (states) => IconThemeData(
           size: 22,
           color: states.contains(WidgetState.selected)
-              ? WeDropColors.brandSoft
+              ? Colors.black
               : WeDropColors.inkFaint,
         ),
       ),

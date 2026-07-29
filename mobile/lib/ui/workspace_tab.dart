@@ -1461,7 +1461,7 @@ class _DynamicControlsCard extends StatelessWidget {
             children: [
               Expanded(
                 child: CardTitle(
-                  icon: Icons.auto_awesome_rounded,
+                  icon: Icons.tune_rounded,
                   text: controls.isEmpty
                       ? 'Dynamic controls'
                       : 'Now on desktop: $appName',

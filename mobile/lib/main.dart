@@ -361,36 +361,47 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         systemNavigationBarIconBrightness: Brightness.light,
       ),
       child: Scaffold(
-        appBar: AppBar(
-          titleSpacing: 20,
-          title: WdAppBarTitle(
-            glyph: Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [WeDropColors.brand, WeDropColors.accent],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+        backgroundColor: WeDropColors.bg,
+        body: NestedScrollView(
+          headerSliverBuilder: (context, innerBoxIsScrolled) => [
+            SliverAppBar(
+              titleSpacing: 20,
+              floating: true,
+              title: WdAppBarTitle(
+                glyph: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(13),
+                    boxShadow: [
+                      BoxShadow(
+                        color: WeDropColors.brand.withValues(alpha: 0.25),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(13),
+                    child: Image.asset(
+                      'assets/wedrop.png',
+                      fit: BoxFit.cover,
+                    ),
+                  ),
                 ),
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: const Icon(
-                Icons.hub_rounded,
-                size: 18,
-                color: Colors.white,
+                title: 'WeDrop',
+                subtitle: connected == 0
+                    ? 'No devices connected'
+                    : '$connected connected',
               ),
             ),
-            title: 'WeDrop',
-            subtitle: connected == 0
-                ? 'No devices connected'
-                : '$connected connected',
-          ),
-        ),
-        body: Stack(
-          children: [
-            const WdBackdropGlow(),
-            SafeArea(child: body),
+          ],
+          body: Stack(
+            children: [
+              SafeArea(
+                top: false,
+                child: body,
+              ),
             ?outgoing,
             if (_service.importingSharedFiles)
               const Positioned(
@@ -401,10 +412,16 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               ),
           ],
         ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _tab,
-          onDestinationSelected: (index) => setState(() => _tab = index),
-          destinations: [
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: NavigationBar(
+                selectedIndex: _tab,
+                onDestinationSelected: (index) => setState(() => _tab = index),
+                destinations: [
             const NavigationDestination(
               icon: Icon(Icons.devices_outlined),
               selectedIcon: Icon(Icons.devices_rounded),
@@ -436,6 +453,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               label: 'Settings',
             ),
           ],
+        ),
+            ),
+          ),
         ),
       ),
     );

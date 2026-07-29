@@ -47,8 +47,8 @@ const ICON_KEYS = [
 
 /** Same curated palette as mobile's kWorkspacePalette. */
 const PALETTE = [
-  "#4F7CFF", "#9B6BFF", "#2FCE8F", "#F2B544", "#F2555A",
-  "#29B6D8", "#FF8A5C", "#B868E0",
+  "#6D78F5", "#B48AF0", "#5F9E82", "#E0A34E", "#E5706F",
+  "#5E9BF0", "#A6AFFF", "#E08A6A",
 ];
 
 const ACTION_TYPES: { value: string; label: string }[] = [

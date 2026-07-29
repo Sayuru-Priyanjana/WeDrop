@@ -14,7 +14,7 @@ export function Card({
   return (
     <div
       onClick={onClick}
-      className={`rounded-[18px] border border-border bg-surface/70 backdrop-blur-sm ${className}`}
+      className={`rounded-[18px] border border-white/[0.07] bg-white/[0.028] backdrop-blur-sm ${className}`}
     >
       {children}
     </div>

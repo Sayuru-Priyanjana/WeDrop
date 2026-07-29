@@ -15,12 +15,15 @@ class NativeBridge {
 
   /// Events pushed up from Android: shared files, notifications, media state.
   static Stream<Map<String, dynamic>> get events {
-    _eventStream ??= _events.receiveBroadcastStream().map((event) {
-      if (event is Map) return Map<String, dynamic>.from(event);
-      return <String, dynamic>{};
-    }).handleError((_) {
-      // A dropped event channel must not take the app down with it.
-    });
+    _eventStream ??= _events
+        .receiveBroadcastStream()
+        .map((event) {
+          if (event is Map) return Map<String, dynamic>.from(event);
+          return <String, dynamic>{};
+        })
+        .handleError((_) {
+          // A dropped event channel must not take the app down with it.
+        });
     return _eventStream!;
   }
 
@@ -38,12 +41,6 @@ class NativeBridge {
     }
   }
 
-  static Future<void> stopBackgroundService() async {
-    try {
-      await _channel.invokeMethod('stopService');
-    } catch (_) {}
-  }
-
   /// Updates the text on the ongoing notification, e.g. "3 devices connected".
   static Future<void> updateServiceStatus(String status) async {
     try {
@@ -56,7 +53,9 @@ class NativeBridge {
   /// native side queues it and Dart drains it once ready.
   static Future<List<String>> consumePendingShares() async {
     try {
-      final result = await _channel.invokeMethod<List<Object?>>('consumeSharedFiles');
+      final result = await _channel.invokeMethod<List<Object?>>(
+        'consumeSharedFiles',
+      );
       return result?.map((e) => e.toString()).toList() ?? const [];
     } catch (_) {
       return const [];
@@ -67,7 +66,8 @@ class NativeBridge {
   /// requires before any app can read other apps' notifications.
   static Future<bool> hasNotificationAccess() async {
     try {
-      return await _channel.invokeMethod<bool>('hasNotificationAccess') ?? false;
+      return await _channel.invokeMethod<bool>('hasNotificationAccess') ??
+          false;
     } catch (_) {
       return false;
     }
@@ -85,7 +85,8 @@ class NativeBridge {
   /// permission), needed to show mirrored alerts and transfer results.
   static Future<bool> requestPostNotifications() async {
     try {
-      return await _channel.invokeMethod<bool>('requestPostNotifications') ?? false;
+      return await _channel.invokeMethod<bool>('requestPostNotifications') ??
+          false;
     } catch (_) {
       return false;
     }
@@ -109,7 +110,9 @@ class NativeBridge {
   /// Alerts the user (waking the screen if needed) that a device wants to pair.
   static Future<void> showPairingRequest(String deviceName) async {
     try {
-      await _channel.invokeMethod('showPairingRequest', {'device_name': deviceName});
+      await _channel.invokeMethod('showPairingRequest', {
+        'device_name': deviceName,
+      });
     } catch (_) {}
   }
 
@@ -190,7 +193,9 @@ class NativeBridge {
   /// Returns an empty map on platforms without the native implementation.
   static Future<Map<String, dynamic>> deviceHealth() async {
     try {
-      final result = await _channel.invokeMethod<Map<Object?, Object?>>('deviceHealth');
+      final result = await _channel.invokeMethod<Map<Object?, Object?>>(
+        'deviceHealth',
+      );
       return result?.map((k, v) => MapEntry(k.toString(), v)) ?? const {};
     } catch (_) {
       return const {};
