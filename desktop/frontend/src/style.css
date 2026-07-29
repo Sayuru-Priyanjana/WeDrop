@@ -1,28 +1,30 @@
 @import "tailwindcss";
 
-/* WeDrop's design tokens. A single dark palette with one accent hue keeps the
-   interface calm — this is a utility that sits in the background, not a
-   dashboard competing for attention. */
+/* WeDrop's design tokens — the "black & clean" direction: a true near-black
+   background with muted, low-saturation accents, matched to the mobile
+   app's own WeDropColors so the two read as one product. */
 @theme {
-  --color-bg: #080b14;
-  --color-bg-soft: #0d1220;
-  --color-surface: #121829;
-  --color-surface-hi: #1a2236;
-  --color-border: #232c45;
-  --color-border-hi: #2f3a58;
+  --color-bg: #070708;
+  --color-bg-soft: #0a0a0c;
+  --color-surface: #0e0e10;
+  --color-surface-hi: #17171a;
+  --color-border: #232326;
+  --color-border-hi: #2e2e33;
 
-  --color-brand: #4f7cff;
-  --color-brand-soft: #6d92ff;
-  --color-accent: #9b6bff;
-  --color-success: #2fce8f;
-  --color-warn: #f2b544;
-  --color-danger: #f2555a;
+  --color-brand: #6d78f5;
+  --color-brand-soft: #a6afff;
+  --color-accent: #b48af0;
+  --color-success: #5f9e82;
+  --color-warn: #e0a34e;
+  --color-danger: #e5706f;
+  --color-info: #5e9bf0;
 
-  --color-ink: #eef2ff;
-  --color-ink-dim: #9aa6c4;
-  --color-ink-faint: #6b7699;
+  --color-ink: #f2f3f5;
+  --color-ink-dim: #8a8e98;
+  --color-ink-faint: #6a6e78;
 
-  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-sans: "Plus Jakarta Sans", "Segoe UI", system-ui, -apple-system,
+    sans-serif;
 }
 
 * {

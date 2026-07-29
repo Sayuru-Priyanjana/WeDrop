@@ -4,6 +4,7 @@ import '../core/app_service.dart';
 import '../core/protocol/messages.dart';
 import '../core/storage/store.dart';
 import '../plugins/files/files_plugin.dart' show TransferStatus;
+import 'media_controller_screen.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -37,9 +38,40 @@ class DevicesScreen extends StatelessWidget {
           hint: 'Devices that trust each other and sync automatically.',
           trailing: paired.isEmpty
               ? null
-              : WdBadge(
-                  '${paired.where((d) => d.connected).length} connected',
-                  colour: WeDropColors.success,
+              : Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(Radii.pill),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.12),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: WeDropColors.success,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${paired.where((d) => d.connected).length} online',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: WeDropColors.success,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
         ),
         if (paired.isEmpty)
@@ -153,7 +185,9 @@ class _BatteryPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: colour.withValues(alpha: 0.14),
+        // Neutral pill background regardless of level — only the icon/text
+        // carry the battery colour, matching the reference exactly.
+        color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(Radii.pill),
       ),
       child: Row(
@@ -238,12 +272,25 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
               padding: const EdgeInsets.all(Space.lg),
               child: Row(
                 children: [
-                  WdIconBadge(
-                    icon: iconForFormFactor(device.formFactor),
-                    colour: WeDropColors.success,
-                    tinted: device.connected,
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.1),
+                      ),
+                    ),
+                    child: Icon(
+                      iconForFormFactor(device.formFactor),
+                      size: 22,
+                      color: device.connected
+                          ? WeDropColors.success
+                          : WeDropColors.inkDim,
+                    ),
                   ),
-                  const SizedBox(width: 14),
+                  const SizedBox(width: 13),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -256,8 +303,8 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
                                   color: WeDropColors.ink,
                                 ),
                               ),
@@ -268,11 +315,11 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
                             ],
                           ],
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 3),
                         Row(
                           children: [
                             StatusDot(status),
-                            const SizedBox(width: 7),
+                            const SizedBox(width: 6),
                             Expanded(
                               child: Text(
                                 '${device.platform} · $statusLabel',
@@ -280,7 +327,7 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   fontSize: 12.5,
-                                  color: WeDropColors.inkFaint,
+                                  color: WeDropColors.inkDim,
                                 ),
                               ),
                             ),
@@ -289,20 +336,53 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
                       ],
                     ),
                   ),
-                  IconButton(
-                    onPressed: device.online ? widget.onSendFiles : null,
-                    icon: const Icon(Icons.upload_rounded),
-                    color: WeDropColors.brandSoft,
-                    tooltip: device.online ? 'Send files' : 'Device is offline',
-                  ),
-                  IconButton(
-                    onPressed: () => _confirmUnpair(context),
-                    icon: const Icon(Icons.link_off_rounded),
-                    color: WeDropColors.danger,
-                    tooltip: 'Remove from ecosystem',
-                  ),
                 ],
               ),
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.md),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _actionChip(
+                    icon: Icons.upload_rounded,
+                    label: 'Send',
+                    colour: WeDropColors.brandSoft,
+                    background: WeDropColors.brand.withValues(alpha: 0.14),
+                    onTap: device.online ? widget.onSendFiles : null,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _actionChip(
+                    icon: Icons.play_arrow_rounded,
+                    label: 'Media',
+                    colour: const Color(0xFFD6D8DE),
+                    background: Colors.white.withValues(alpha: 0.05),
+                    onTap: device.connected
+                        ? () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => MediaControllerScreen(
+                                service: widget.service,
+                                deviceId: device.deviceId,
+                              ),
+                            ),
+                          )
+                        : null,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _iconChip(
+                    icon: Icons.link_off_rounded,
+                    colour: WeDropColors.danger,
+                    background: WeDropColors.danger.withValues(alpha: 0.10),
+                    onTap: () => _confirmUnpair(context),
+                  ),
+                ),
+              ],
             ),
           ),
 
@@ -380,6 +460,64 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  /// A labeled, tinted action button — "Send"/"Media" on the device card.
+  Widget _actionChip({
+    required IconData icon,
+    required String label,
+    required Color colour,
+    required Color background,
+    required VoidCallback? onTap,
+  }) {
+    final foreground = onTap == null ? colour.withValues(alpha: 0.4) : colour;
+    return Material(
+      color: onTap == null ? background.withValues(alpha: 0.5) : background,
+      borderRadius: BorderRadius.circular(Radii.control),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(Radii.control),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 15, color: foreground),
+              const SizedBox(width: 7),
+              Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  color: foreground,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// An icon-only tinted action button — the "disconnect" chip.
+  Widget _iconChip({
+    required IconData icon,
+    required Color colour,
+    required Color background,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: background,
+      borderRadius: BorderRadius.circular(Radii.control),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(Radii.control),
+        child: Padding(
+          padding: const EdgeInsets.all(11),
+          child: Icon(icon, size: 15, color: colour),
+        ),
       ),
     );
   }

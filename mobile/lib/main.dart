@@ -365,19 +365,15 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           titleSpacing: 20,
           title: WdAppBarTitle(
             glyph: Container(
-              width: 34,
-              height: 34,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [WeDropColors.brand, WeDropColors.accent],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(11),
+                color: WeDropColors.brand,
+                borderRadius: BorderRadius.circular(13),
               ),
               child: const Icon(
                 Icons.hub_rounded,
-                size: 18,
+                size: 22,
                 color: Colors.white,
               ),
             ),

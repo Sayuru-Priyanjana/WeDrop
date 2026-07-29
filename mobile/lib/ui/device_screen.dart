@@ -85,9 +85,10 @@ class _DeviceScreenState extends State<DeviceScreen>
           glyph: Icon(
             iconForFormFactor(device.formFactor),
             size: 20,
-            color: WeDropColors.brandSoft,
+            color: WeDropColors.brand,
           ),
           title: device.name,
+          titleFontSize: 19,
           subtitle: connected
               ? 'Connected'
               : device.online
@@ -227,64 +228,42 @@ class _WorkspacePreviewCard extends StatelessWidget {
     final layout = service.activeWorkspaceLayoutFor(device.deviceId);
     final count = layout.widgets.length;
 
-    return Material(
-      color: WeDropColors.surface,
-      borderRadius: BorderRadius.circular(Radii.card),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(Radii.card),
-        onTap: () => openWorkspaceFullScreen(context, service, device),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(Radii.card),
-            border: Border.all(color: WeDropColors.border),
+    return WdCard(
+      onTap: () => openWorkspaceFullScreen(context, service, device),
+      child: Row(
+        children: [
+          WdIconBadge(
+            icon: Icons.dashboard_customize_rounded,
+            colour: WeDropColors.brandSoft,
+            size: 40,
+            tinted: true,
           ),
-          padding: const EdgeInsets.all(Space.lg),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: WeDropColors.brand.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(Radii.control),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Workspace',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: WeDropColors.ink,
+                  ),
                 ),
-                child: const Icon(
-                  Icons.dashboard_customize_rounded,
-                  size: 20,
-                  color: WeDropColors.brandSoft,
+                const SizedBox(height: 2),
+                Text(
+                  '${layout.name} · $count widget${count == 1 ? '' : 's'}',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: WeDropColors.inkFaint,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Workspace',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: WeDropColors.ink,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${layout.name} · $count widget${count == 1 ? '' : 's'}',
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        color: WeDropColors.inkFaint,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: WeDropColors.inkFaint,
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+          const Icon(Icons.chevron_right_rounded, color: WeDropColors.inkFaint),
+        ],
       ),
     );
   }
@@ -321,16 +300,19 @@ class _HealthGrid extends StatelessWidget {
           icon: _networkIcon(h?.networkType),
           label: 'Network',
           value: _networkLabel(h?.networkType),
+          accent: WeDropColors.info,
         ),
         _HealthTile(
           icon: Icons.memory_rounded,
           label: 'CPU',
           value: h == null || h.cpuPercent < 0 ? '—' : '${h.cpuPercent}%',
+          accent: WeDropColors.warn,
         ),
         _HealthTile(
           icon: Icons.sd_storage_rounded,
           label: 'Memory',
           value: h == null || h.memPercent < 0 ? '—' : '${h.memPercent}%',
+          accent: WeDropColors.accent,
         ),
       ],
     ];
@@ -385,39 +367,37 @@ class _HealthTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return WdCard(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+    // A smaller radius and a stacked (icon-over-value-over-label) layout
+    // than WdCard's default — matching the reference's compact stat tile,
+    // which reads as a proper rounded square rather than a pill at this
+    // tile's height.
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.028),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: accent, size: 14),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: WeDropColors.ink,
-                  ),
-                ),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 9,
-                    color: WeDropColors.inkFaint,
-                  ),
-                ),
-              ],
+          Icon(icon, color: accent, size: 17),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: WeDropColors.ink,
             ),
+          ),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 11, color: WeDropColors.inkDim),
           ),
         ],
       ),
@@ -459,6 +439,7 @@ class _MediaCard extends StatelessWidget {
           CardTitle(
             icon: Icons.music_note_rounded,
             text: hasMedia ? (m.app.isEmpty ? 'Now playing' : m.app) : 'Media',
+            iconColor: WeDropColors.brandSoft,
           ),
           const SizedBox(height: Space.md),
           if (hasMedia) ...[
@@ -548,11 +529,28 @@ class _MediaCard extends StatelessWidget {
   }
 
   Widget _mediaBtn(IconData icon, String command, {bool large = false}) {
-    return IconButton(
-      onPressed: () => service.sendMediaCommand(device.deviceId, command),
-      icon: Icon(icon),
-      iconSize: large ? 34 : 26,
-      color: large ? WeDropColors.brandSoft : WeDropColors.inkDim,
+    if (!large) {
+      return IconButton(
+        onPressed: () => service.sendMediaCommand(device.deviceId, command),
+        icon: Icon(icon),
+        iconSize: 26,
+        color: WeDropColors.inkDim,
+      );
+    }
+    // Play/pause is the prominent action — a solid brand-filled circle,
+    // not just a colour on a bare icon, matching the reference.
+    return Material(
+      color: WeDropColors.brand,
+      shape: const CircleBorder(),
+      child: InkWell(
+        onTap: () => service.sendMediaCommand(device.deviceId, command),
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Icon(icon, size: 25, color: Colors.white),
+        ),
+      ),
     );
   }
 }
@@ -613,7 +611,7 @@ class _SeekBarState extends State<_SeekBar> {
         child: const LinearProgressIndicator(
           minHeight: 4,
           backgroundColor: WeDropColors.border,
-          valueColor: AlwaysStoppedAnimation(WeDropColors.accent),
+          valueColor: AlwaysStoppedAnimation(WeDropColors.brand),
         ),
       );
     }
@@ -628,9 +626,9 @@ class _SeekBarState extends State<_SeekBar> {
             trackHeight: 3,
             thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-            activeTrackColor: WeDropColors.accent,
+            activeTrackColor: WeDropColors.brand,
             inactiveTrackColor: WeDropColors.border,
-            thumbColor: WeDropColors.accent,
+            thumbColor: WeDropColors.brand,
           ),
           child: Slider(
             min: 0,
@@ -796,12 +794,19 @@ class _QuickActions extends StatelessWidget {
                 }
               }
             },
-            icon: const Icon(Icons.content_paste_rounded, size: 18),
-            label: const Text('Send clipboard'),
+            icon: const Icon(Icons.content_paste_rounded, size: 17),
+            label: Text('Send clipboard to ${device.name}'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: WeDropColors.inkDim,
-              side: const BorderSide(color: WeDropColors.border),
-              padding: const EdgeInsets.symmetric(vertical: 14),
+              foregroundColor: WeDropColors.brandSoft,
+              backgroundColor: WeDropColors.brand.withValues(alpha: 0.08),
+              side: BorderSide(
+                color: WeDropColors.brand.withValues(alpha: 0.28),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              textStyle: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+              ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(Radii.control),
               ),
@@ -906,10 +911,14 @@ class _RemoteTabState extends State<_RemoteTab> {
               onPanEnd: (_) {
                 _last = null;
                 _flushMove();
+                _flushTimer?.cancel();
+                _flushTimer = null;
                 setState(() => _panActive = false);
               },
               onPanCancel: () {
                 _last = null;
+                _flushTimer?.cancel();
+                _flushTimer = null;
                 setState(() => _panActive = false);
               },
               // A single tap is a left click; the OS focus follows the cursor.
@@ -1260,6 +1269,13 @@ class _PresentTabState extends State<_PresentTab> {
                       onPanEnd: (_) {
                         _last = null;
                         _flushMove();
+                        _flushTimer?.cancel();
+                        _flushTimer = null;
+                      },
+                      onPanCancel: () {
+                        _last = null;
+                        _flushTimer?.cancel();
+                        _flushTimer = null;
                       },
                       child: const Center(
                         child: Column(

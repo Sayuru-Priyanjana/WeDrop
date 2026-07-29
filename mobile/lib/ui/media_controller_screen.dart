@@ -305,11 +305,26 @@ class _NowPlayingCard extends StatelessWidget {
   }
 
   Widget _transportBtn(IconData icon, String command, {bool large = false}) {
-    return IconButton(
-      onPressed: () => service.sendMediaCommand(device.deviceId, command),
-      icon: Icon(icon),
-      iconSize: large ? 36 : 28,
-      color: large ? WeDropColors.brandSoft : WeDropColors.inkDim,
+    if (!large) {
+      return IconButton(
+        onPressed: () => service.sendMediaCommand(device.deviceId, command),
+        icon: Icon(icon),
+        iconSize: 28,
+        color: WeDropColors.inkDim,
+      );
+    }
+    return Material(
+      color: WeDropColors.brand,
+      shape: const CircleBorder(),
+      child: InkWell(
+        onTap: () => service.sendMediaCommand(device.deviceId, command),
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: 56,
+          height: 56,
+          child: Icon(icon, size: 28, color: Colors.white),
+        ),
+      ),
     );
   }
 }
@@ -361,7 +376,7 @@ class _ControllerSeekBarState extends State<_ControllerSeekBar> {
         child: const LinearProgressIndicator(
           minHeight: 4,
           backgroundColor: WeDropColors.border,
-          valueColor: AlwaysStoppedAnimation(WeDropColors.accent),
+          valueColor: AlwaysStoppedAnimation(WeDropColors.brand),
         ),
       );
     }
@@ -376,9 +391,9 @@ class _ControllerSeekBarState extends State<_ControllerSeekBar> {
             trackHeight: 3,
             thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-            activeTrackColor: WeDropColors.accent,
+            activeTrackColor: WeDropColors.brand,
             inactiveTrackColor: WeDropColors.border,
-            thumbColor: WeDropColors.accent,
+            thumbColor: WeDropColors.brand,
           ),
           child: Slider(
             min: 0,

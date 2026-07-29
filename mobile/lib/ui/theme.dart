@@ -1,25 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 /// WeDrop's palette, kept deliberately in step with the desktop app so the two
-/// read as one product.
+/// read as one product. This is the "black & clean" direction — a true
+/// near-black background with muted, low-saturation accents, extracted from
+/// the project's own design reference.
 class WeDropColors {
-  static const bg = Color(0xFF080B14);
-  static const bgSoft = Color(0xFF0D1220);
-  static const surface = Color(0xFF121829);
-  static const surfaceHi = Color(0xFF1A2236);
-  static const border = Color(0xFF232C45);
-  static const borderHi = Color(0xFF2F3A58);
+  static const bg = Color(0xFF070708);
+  static const bgSoft = Color(0xFF0A0A0C);
+  static const surface = Color(0xFF0E0E10);
+  static const surfaceHi = Color(0xFF17171A);
+  static const border = Color(0xFF232326);
+  static const borderHi = Color(0xFF2E2E33);
 
-  static const brand = Color(0xFF4F7CFF);
-  static const brandSoft = Color(0xFF6D92FF);
-  static const accent = Color(0xFF9B6BFF);
-  static const success = Color(0xFF2FCE8F);
-  static const warn = Color(0xFFF2B544);
-  static const danger = Color(0xFFF2555A);
+  static const brand = Color(0xFF6D78F5);
+  static const brandSoft = Color(0xFFA6AFFF);
+  static const accent = Color(0xFFB48AF0);
+  static const success = Color(0xFF5F9E82);
+  static const warn = Color(0xFFE0A34E);
+  static const danger = Color(0xFFE5706F);
+  static const info = Color(0xFF5E9BF0);
 
-  static const ink = Color(0xFFEEF2FF);
-  static const inkDim = Color(0xFF9AA6C4);
-  static const inkFaint = Color(0xFF6B7699);
+  static const ink = Color(0xFFF2F3F5);
+  static const inkDim = Color(0xFF8A8E98);
+  static const inkFaint = Color(0xFF6A6E78);
 }
 
 /// Spacing on a 4pt grid. Using these instead of ad-hoc numbers is what keeps
@@ -115,6 +119,10 @@ ThemeData buildWeDropTheme() {
     scaffoldBackgroundColor: WeDropColors.bg,
     canvasColor: WeDropColors.bg,
     splashFactory: InkSparkle.splashFactory,
+    // The one place the app sets its display face — every AppText style and
+    // inline TextStyle in the codebase omits fontFamily, so this cascades to
+    // all of them through DefaultTextStyle merging.
+    fontFamily: GoogleFonts.plusJakartaSans().fontFamily,
     appBarTheme: const AppBarTheme(
       backgroundColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
@@ -205,7 +213,9 @@ ThemeData buildWeDropTheme() {
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: WeDropColors.bgSoft,
+      // The reference keeps the nav bar the same solid near-black as the
+      // screen itself, not a step lighter.
+      backgroundColor: WeDropColors.bg,
       surfaceTintColor: Colors.transparent,
       indicatorColor: WeDropColors.brand.withValues(alpha: 0.16),
       height: 68,

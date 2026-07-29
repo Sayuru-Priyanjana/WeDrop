@@ -51,7 +51,6 @@ class Settings {
 
   bool discoverable;
   bool acceptNewPairing;
-  bool runInBackground;
 
   /// Off by default: keeps the per-device overview down to the basics
   /// (battery, sound) most people actually look at, with network/CPU/memory
@@ -70,53 +69,50 @@ class Settings {
     this.allowAutomation = false,
     this.discoverable = true,
     this.acceptNewPairing = true,
-    this.runInBackground = true,
     this.showAdvancedFeatures = false,
   });
 
   /// The capabilities advertised to peers, derived from the receive switches so
   /// peers can skip sending what this device would discard.
   List<String> get capabilities => [
-        if (receiveClipboard) Capability.clipboard,
-        Capability.files,
-        if (receiveNotifications) Capability.notifications,
-        if (allowMediaControl) Capability.media,
-        Capability.workspace,
-        Capability.adaptiveControls,
-        Capability.health,
-      ];
+    if (receiveClipboard) Capability.clipboard,
+    Capability.files,
+    if (receiveNotifications) Capability.notifications,
+    if (allowMediaControl) Capability.media,
+    Capability.workspace,
+    Capability.adaptiveControls,
+    Capability.health,
+  ];
 
   Map<String, dynamic> toJson() => {
-        'auto_sync_clipboard': autoSyncClipboard,
-        'receive_clipboard': receiveClipboard,
-        'clipboard_max_chars': clipboardMaxChars,
-        'auto_accept_files': autoAcceptFiles,
-        'share_notifications': shareNotifications,
-        'receive_notifications': receiveNotifications,
-        'allow_media_control': allowMediaControl,
-        'cursor_speed': cursorSpeed,
-        'allow_automation': allowAutomation,
-        'discoverable': discoverable,
-        'accept_new_pairing': acceptNewPairing,
-        'run_in_background': runInBackground,
-        'show_advanced_features': showAdvancedFeatures,
-      };
+    'auto_sync_clipboard': autoSyncClipboard,
+    'receive_clipboard': receiveClipboard,
+    'clipboard_max_chars': clipboardMaxChars,
+    'auto_accept_files': autoAcceptFiles,
+    'share_notifications': shareNotifications,
+    'receive_notifications': receiveNotifications,
+    'allow_media_control': allowMediaControl,
+    'cursor_speed': cursorSpeed,
+    'allow_automation': allowAutomation,
+    'discoverable': discoverable,
+    'accept_new_pairing': acceptNewPairing,
+    'show_advanced_features': showAdvancedFeatures,
+  };
 
   factory Settings.fromJson(Map<String, dynamic> json) => Settings(
-        autoSyncClipboard: json['auto_sync_clipboard'] as bool? ?? true,
-        receiveClipboard: json['receive_clipboard'] as bool? ?? true,
-        clipboardMaxChars: json['clipboard_max_chars'] as int? ?? 65536,
-        autoAcceptFiles: json['auto_accept_files'] as bool? ?? true,
-        shareNotifications: json['share_notifications'] as bool? ?? true,
-        receiveNotifications: json['receive_notifications'] as bool? ?? true,
-        allowMediaControl: json['allow_media_control'] as bool? ?? true,
-        cursorSpeed: (json['cursor_speed'] as num?)?.toDouble() ?? 1.0,
-        allowAutomation: json['allow_automation'] as bool? ?? false,
-        discoverable: json['discoverable'] as bool? ?? true,
-        acceptNewPairing: json['accept_new_pairing'] as bool? ?? true,
-        runInBackground: json['run_in_background'] as bool? ?? true,
-        showAdvancedFeatures: json['show_advanced_features'] as bool? ?? false,
-      );
+    autoSyncClipboard: json['auto_sync_clipboard'] as bool? ?? true,
+    receiveClipboard: json['receive_clipboard'] as bool? ?? true,
+    clipboardMaxChars: json['clipboard_max_chars'] as int? ?? 65536,
+    autoAcceptFiles: json['auto_accept_files'] as bool? ?? true,
+    shareNotifications: json['share_notifications'] as bool? ?? true,
+    receiveNotifications: json['receive_notifications'] as bool? ?? true,
+    allowMediaControl: json['allow_media_control'] as bool? ?? true,
+    cursorSpeed: (json['cursor_speed'] as num?)?.toDouble() ?? 1.0,
+    allowAutomation: json['allow_automation'] as bool? ?? false,
+    discoverable: json['discoverable'] as bool? ?? true,
+    acceptNewPairing: json['accept_new_pairing'] as bool? ?? true,
+    showAdvancedFeatures: json['show_advanced_features'] as bool? ?? false,
+  );
 
   Settings copy() => Settings.fromJson(toJson());
 }
@@ -194,34 +190,34 @@ class TrustedDevice {
   }
 
   Map<String, dynamic> toJson() => {
-        'device_id': deviceId,
-        'name': name,
-        'platform': platform,
-        'form_factor': formFactor,
-        'public_key': publicKey,
-        'paired_at': pairedAt,
-        'last_seen': lastSeen,
-        'allow_clipboard': allowClipboard,
-        'allow_files': allowFiles,
-        'allow_notifications': allowNotifications,
-        'allow_media': allowMedia,
-        'allow_workspace': allowWorkspace,
-      };
+    'device_id': deviceId,
+    'name': name,
+    'platform': platform,
+    'form_factor': formFactor,
+    'public_key': publicKey,
+    'paired_at': pairedAt,
+    'last_seen': lastSeen,
+    'allow_clipboard': allowClipboard,
+    'allow_files': allowFiles,
+    'allow_notifications': allowNotifications,
+    'allow_media': allowMedia,
+    'allow_workspace': allowWorkspace,
+  };
 
   factory TrustedDevice.fromJson(Map<String, dynamic> json) => TrustedDevice(
-        deviceId: json['device_id'] as String? ?? '',
-        name: json['name'] as String? ?? 'Device',
-        platform: json['platform'] as String? ?? '',
-        formFactor: json['form_factor'] as String? ?? FormFactor.desktop,
-        publicKey: json['public_key'] as String? ?? '',
-        pairedAt: json['paired_at'] as int?,
-        lastSeen: json['last_seen'] as int? ?? 0,
-        allowClipboard: json['allow_clipboard'] as bool? ?? true,
-        allowFiles: json['allow_files'] as bool? ?? true,
-        allowNotifications: json['allow_notifications'] as bool? ?? true,
-        allowMedia: json['allow_media'] as bool? ?? true,
-        allowWorkspace: json['allow_workspace'] as bool? ?? true,
-      );
+    deviceId: json['device_id'] as String? ?? '',
+    name: json['name'] as String? ?? 'Device',
+    platform: json['platform'] as String? ?? '',
+    formFactor: json['form_factor'] as String? ?? FormFactor.desktop,
+    publicKey: json['public_key'] as String? ?? '',
+    pairedAt: json['paired_at'] as int?,
+    lastSeen: json['last_seen'] as int? ?? 0,
+    allowClipboard: json['allow_clipboard'] as bool? ?? true,
+    allowFiles: json['allow_files'] as bool? ?? true,
+    allowNotifications: json['allow_notifications'] as bool? ?? true,
+    allowMedia: json['allow_media'] as bool? ?? true,
+    allowWorkspace: json['allow_workspace'] as bool? ?? true,
+  );
 }
 
 /// The built-in Workspace-tab widget types. A "widget" here is one card in
@@ -253,7 +249,13 @@ class WidgetType {
     mediaController: 'music',
   };
 
-  static const all = [desktopSwitcher, adaptiveControls, minimizedApps, buttons, mediaController];
+  static const all = [
+    desktopSwitcher,
+    adaptiveControls,
+    minimizedApps,
+    buttons,
+    mediaController,
+  ];
 }
 
 /// How much horizontal space a widget takes in its layout — full width, or
@@ -278,18 +280,18 @@ class WidgetInstance {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'type': type,
-        'size': size,
-        'order': order,
-      };
+    'id': id,
+    'type': type,
+    'size': size,
+    'order': order,
+  };
 
   factory WidgetInstance.fromJson(Map<String, dynamic> json) => WidgetInstance(
-        id: json['id'] as String? ?? '',
-        type: json['type'] as String? ?? '',
-        size: json['size'] as String? ?? WidgetSize.full,
-        order: json['order'] as int? ?? 0,
-      );
+    id: json['id'] as String? ?? '',
+    type: json['type'] as String? ?? '',
+    size: json['size'] as String? ?? WidgetSize.full,
+    order: json['order'] as int? ?? 0,
+  );
 }
 
 /// A named, user-customizable arrangement of widgets for one paired device
@@ -301,15 +303,20 @@ class WorkspaceLayout {
   String name;
   List<WidgetInstance> widgets;
 
-  WorkspaceLayout({required this.id, required this.name, required this.widgets});
+  WorkspaceLayout({
+    required this.id,
+    required this.name,
+    required this.widgets,
+  });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'widgets': widgets.map((w) => w.toJson()).toList(),
-      };
+    'id': id,
+    'name': name,
+    'widgets': widgets.map((w) => w.toJson()).toList(),
+  };
 
-  factory WorkspaceLayout.fromJson(Map<String, dynamic> json) => WorkspaceLayout(
+  factory WorkspaceLayout.fromJson(Map<String, dynamic> json) =>
+      WorkspaceLayout(
         id: json['id'] as String? ?? '',
         name: json['name'] as String? ?? 'Layout',
         widgets: ((json['widgets'] as List?) ?? const [])
@@ -321,20 +328,28 @@ class WorkspaceLayout {
 /// The layout every device starts with — the same four cards the Workspace
 /// tab used to show permanently, now just the first user-editable preset.
 WorkspaceLayout _defaultLayout() => WorkspaceLayout(
-      id: 'default',
-      name: 'Default',
-      widgets: [
-        WidgetInstance(
-          id: 'default_switcher',
-          type: WidgetType.desktopSwitcher,
-          size: WidgetSize.compact,
-          order: 0,
-        ),
-        WidgetInstance(id: 'default_minimized', type: WidgetType.minimizedApps, order: 1),
-        WidgetInstance(id: 'default_adaptive', type: WidgetType.adaptiveControls, order: 2),
-        WidgetInstance(id: 'default_buttons', type: WidgetType.buttons, order: 3),
-      ],
-    );
+  id: 'default',
+  name: 'Default',
+  widgets: [
+    WidgetInstance(
+      id: 'default_switcher',
+      type: WidgetType.desktopSwitcher,
+      size: WidgetSize.compact,
+      order: 0,
+    ),
+    WidgetInstance(
+      id: 'default_minimized',
+      type: WidgetType.minimizedApps,
+      order: 1,
+    ),
+    WidgetInstance(
+      id: 'default_adaptive',
+      type: WidgetType.adaptiveControls,
+      order: 2,
+    ),
+    WidgetInstance(id: 'default_buttons', type: WidgetType.buttons, order: 3),
+  ],
+);
 
 /// Loads and saves everything that must survive a restart.
 class WeDropStore {
@@ -380,7 +395,10 @@ class WeDropStore {
       deviceId = const Uuid().v4();
       identity = await DeviceIdentity.generate(deviceId);
       await _prefs.setString(_keyDeviceId, deviceId);
-      await _prefs.setString(_keySeed, base64.encode(await identity.extractSeed()));
+      await _prefs.setString(
+        _keySeed,
+        base64.encode(await identity.extractSeed()),
+      );
       await _prefs.setString(_keyPublic, identity.publicKeyBase64);
     }
 
@@ -407,9 +425,13 @@ class WeDropStore {
     final layoutsRaw = _prefs.getString(_keyLayouts);
     if (layoutsRaw != null) {
       try {
-        (jsonDecode(layoutsRaw) as Map<String, dynamic>).forEach((deviceId, layouts) {
-          _layouts[deviceId] =
-              (layouts as List).map((e) => WorkspaceLayout.fromJson(e as Map<String, dynamic>)).toList();
+        (jsonDecode(layoutsRaw) as Map<String, dynamic>).forEach((
+          deviceId,
+          layouts,
+        ) {
+          _layouts[deviceId] = (layouts as List)
+              .map((e) => WorkspaceLayout.fromJson(e as Map<String, dynamic>))
+              .toList();
         });
       } catch (_) {
         // A corrupt map must not stop the app from starting.
@@ -419,7 +441,10 @@ class WeDropStore {
     final activeRaw = _prefs.getString(_keyActiveLayout);
     if (activeRaw != null) {
       try {
-        (jsonDecode(activeRaw) as Map<String, dynamic>).forEach((deviceId, layoutId) {
+        (jsonDecode(activeRaw) as Map<String, dynamic>).forEach((
+          deviceId,
+          layoutId,
+        ) {
           _activeLayout[deviceId] = layoutId as String;
         });
       } catch (_) {
@@ -465,7 +490,11 @@ class WeDropStore {
     await _saveTrusted();
   }
 
-  Future<void> setPermission(String deviceId, String capability, bool allowed) async {
+  Future<void> setPermission(
+    String deviceId,
+    String capability,
+    bool allowed,
+  ) async {
     _trusted[deviceId]?.setPermission(capability, allowed);
     await _saveTrusted();
   }
@@ -522,10 +551,16 @@ class WeDropStore {
   WorkspaceLayout activeLayoutFor(String deviceId) {
     final layouts = layoutsFor(deviceId);
     final activeId = _activeLayout[deviceId];
-    return layouts.firstWhere((l) => l.id == activeId, orElse: () => layouts.first);
+    return layouts.firstWhere(
+      (l) => l.id == activeId,
+      orElse: () => layouts.first,
+    );
   }
 
-  Future<void> saveLayouts(String deviceId, List<WorkspaceLayout> layouts) async {
+  Future<void> saveLayouts(
+    String deviceId,
+    List<WorkspaceLayout> layouts,
+  ) async {
     _layouts[deviceId] = layouts;
     await _saveLayouts();
   }
@@ -538,7 +573,11 @@ class WeDropStore {
   Future<void> _saveLayouts() async {
     await _prefs.setString(
       _keyLayouts,
-      jsonEncode(_layouts.map((id, list) => MapEntry(id, list.map((l) => l.toJson()).toList()))),
+      jsonEncode(
+        _layouts.map(
+          (id, list) => MapEntry(id, list.map((l) => l.toJson()).toList()),
+        ),
+      ),
     );
   }
 }

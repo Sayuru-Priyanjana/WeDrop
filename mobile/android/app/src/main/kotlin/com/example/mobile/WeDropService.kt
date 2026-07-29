@@ -37,7 +37,6 @@ class WeDropService : Service() {
 
     companion object {
         private const val ACTION_START = "com.example.mobile.START"
-        private const val ACTION_STOP = "com.example.mobile.STOP"
         private const val ACTION_UPDATE = "com.example.mobile.UPDATE"
         const val ACTION_DISMISSED = "com.example.mobile.DISMISSED"
         private const val EXTRA_STATUS = "status"
@@ -48,11 +47,6 @@ class WeDropService : Service() {
                 putExtra(EXTRA_STATUS, status)
             }
             ContextCompatStartForeground(context, intent)
-        }
-
-        fun stop(context: Context) {
-            val intent = Intent(context, WeDropService::class.java).apply { action = ACTION_STOP }
-            context.startService(intent)
         }
 
         fun updateStatus(context: Context, status: String) {
@@ -75,12 +69,6 @@ class WeDropService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_STOP -> {
-                releaseLocks()
-                stopForegroundCompat()
-                stopSelf()
-                return START_NOT_STICKY
-            }
             ACTION_DISMISSED -> {
                 dismissed = true
                 return START_STICKY
@@ -120,15 +108,6 @@ class WeDropService : Service() {
             )
         } else {
             startForeground(NotificationHelper.SERVICE_NOTIFICATION_ID, notification)
-        }
-    }
-
-    private fun stopForegroundCompat() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-            @Suppress("DEPRECATION")
-            stopForeground(true)
         }
     }
 

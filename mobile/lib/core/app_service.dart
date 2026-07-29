@@ -121,6 +121,8 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
 
   Timer? _mediaTicker;
   StreamSubscription? _nativeEvents;
+  StreamSubscription? _onPeerSub;
+  StreamSubscription? _onPeerLostSub;
   bool _notificationAccess = false;
 
   // -------------------------------------------------------------- getters
@@ -164,14 +166,16 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     if (!_started) return const [];
     final list = _discovery.peers
         .where((p) => !_store.isTrusted(p.deviceId) && p.deviceId != deviceId)
-        .map((p) => DeviceView(
-              deviceId: p.deviceId,
-              name: p.name,
-              platform: p.platform,
-              formFactor: p.formFactor,
-              ip: p.ip,
-              online: true,
-            ))
+        .map(
+          (p) => DeviceView(
+            deviceId: p.deviceId,
+            name: p.name,
+            platform: p.platform,
+            formFactor: p.formFactor,
+            ip: p.ip,
+            online: true,
+          ),
+        )
         .toList();
     list.sort((a, b) => a.name.compareTo(b.name));
     return list;
@@ -187,20 +191,23 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
       // faced with three devices all called "My Phone".
       if (_store.deviceName == 'My Phone') {
         final model = await NativeBridge.deviceModelName();
-        if (model != null && model.isNotEmpty) await _store.setDeviceName(model);
+        if (model != null && model.isNotEmpty)
+          await _store.setDeviceName(model);
       }
 
       final dir = await _resolveDownloadDir();
       downloadDir = dir;
 
-      _discovery = DiscoveryService(DiscoveryMessage(
-        deviceId: deviceId,
-        name: deviceName,
-        platform: Platform.operatingSystem,
-        formFactor: FormFactor.phone,
-        tcpPort: transportPort,
-        publicKey: publicKey,
-      ));
+      _discovery = DiscoveryService(
+        DiscoveryMessage(
+          deviceId: deviceId,
+          name: deviceName,
+          platform: Platform.operatingSystem,
+          formFactor: FormFactor.phone,
+          tcpPort: transportPort,
+          publicKey: publicKey,
+        ),
+      );
 
       _manager = ConnectionManager(
         local: _localInfo,
@@ -244,22 +251,26 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
       _healthPlugin = HealthPlugin(deviceId);
       _plugins.register(_healthPlugin);
       _notifsPlugin = NotificationsPlugin(
-        resolveName: (deviceId, fallback) => _store.trusted(deviceId)?.name ?? fallback,
+        resolveName: (deviceId, fallback) =>
+            _store.trusted(deviceId)?.name ?? fallback,
         generateId: () => _uuid.v4(),
       );
       _plugins.register(_notifsPlugin);
       _clipPlugin = ClipboardPlugin(
         deviceId: deviceId,
         deviceName: () => deviceName,
-        resolveName: (deviceId, fallback) => _store.trusted(deviceId)?.name ?? fallback,
+        resolveName: (deviceId, fallback) =>
+            _store.trusted(deviceId)?.name ?? fallback,
       );
       _plugins.register(_clipPlugin);
       _mediaPlugin = MediaPlugin(
-        resolveName: (deviceId, fallback) => _store.trusted(deviceId)?.name ?? fallback,
+        resolveName: (deviceId, fallback) =>
+            _store.trusted(deviceId)?.name ?? fallback,
       );
       _plugins.register(_mediaPlugin);
       _filesPlugin = FilesPlugin(
-        resolveName: (deviceId, fallback) => _store.trusted(deviceId)?.name ?? fallback,
+        resolveName: (deviceId, fallback) =>
+            _store.trusted(deviceId)?.name ?? fallback,
         generateId: () => _uuid.v4(),
         downloadDir: () => downloadDir,
       );
@@ -276,17 +287,19 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
       _started = true;
 
       // Announce the port actually bound, not the one we hoped for.
-      _discovery.updateConfig(DiscoveryMessage(
-        deviceId: deviceId,
-        name: deviceName,
-        platform: Platform.operatingSystem,
-        formFactor: FormFactor.phone,
-        tcpPort: port,
-        publicKey: publicKey,
-      ));
+      _discovery.updateConfig(
+        DiscoveryMessage(
+          deviceId: deviceId,
+          name: deviceName,
+          platform: Platform.operatingSystem,
+          formFactor: FormFactor.phone,
+          tcpPort: port,
+          publicKey: publicKey,
+        ),
+      );
 
-      _discovery.onPeer.listen((_) => notifyListeners());
-      _discovery.onPeerLost.listen((_) => notifyListeners());
+      _onPeerSub = _discovery.onPeer.listen((_) => notifyListeners());
+      _onPeerLostSub = _discovery.onPeerLost.listen((_) => notifyListeners());
 
       if (settings.discoverable) await _discovery.start();
 
@@ -302,27 +315,28 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   }
 
   LocalInfo get _localInfo => LocalInfo(
-        identity: _store.identity,
-        name: deviceName,
-        platform: Platform.operatingSystem,
-        formFactor: FormFactor.phone,
-      );
+    identity: _store.identity,
+    name: deviceName,
+    platform: Platform.operatingSystem,
+    formFactor: FormFactor.phone,
+  );
 
   DeviceInfo _localDeviceInfo() => DeviceInfo(
-        deviceId: deviceId,
-        name: deviceName,
-        platform: Platform.operatingSystem,
-        formFactor: FormFactor.phone,
-        capabilities: settings.capabilities,
-        battery: -1,
-      );
+    deviceId: deviceId,
+    name: deviceName,
+    platform: Platform.operatingSystem,
+    formFactor: FormFactor.phone,
+    capabilities: settings.capabilities,
+    battery: -1,
+  );
 
   Future<String> _resolveDownloadDir() async {
     try {
       // Downloads/WeDrop is where a user would look for a received file; the
       // app's own directory is the fallback when it is not reachable.
       final downloads = await getDownloadsDirectory();
-      if (downloads != null) return '${downloads.path}${Platform.pathSeparator}WeDrop';
+      if (downloads != null)
+        return '${downloads.path}${Platform.pathSeparator}WeDrop';
     } catch (_) {}
 
     final docs = await getApplicationDocumentsDirectory();
@@ -333,7 +347,9 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     // The ongoing "connected devices" notification is always on — it is the
     // one persistent, undismissable proof the ecosystem is actually reachable,
     // so it does not make sense to hide it behind the background-sync toggle.
-    await NativeBridge.startBackgroundService(status: 'Waiting for your devices');
+    await NativeBridge.startBackgroundService(
+      status: 'Waiting for your devices',
+    );
     await NativeBridge.requestPostNotifications();
     _notificationAccess = await NativeBridge.hasNotificationAccess();
 
@@ -363,7 +379,8 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
 
       case 'shared_files':
         importingSharedFiles = false;
-        final paths = (event['paths'] as List?)?.map((e) => e.toString()) ?? const [];
+        final paths =
+            (event['paths'] as List?)?.map((e) => e.toString()) ?? const [];
         pendingSharedFiles.addAll(paths);
         notifyListeners();
         break;
@@ -408,12 +425,15 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
           // inline scrubber) carries the seek target in `position`; button taps
           // for the other commands don't set it.
           final position = event['position'] as int?;
-          sendMediaCommand(targetDeviceId, command, position: position).catchError((_) {});
+          sendMediaCommand(
+            targetDeviceId,
+            command,
+            position: position,
+          ).catchError((_) {});
         }
         break;
     }
   }
-
 
   // ----------------------------------------------------- PeerAuthorizer
 
@@ -448,14 +468,16 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
 
   /// A peer's currently-minimized windows, or null if nothing has been
   /// reported yet.
-  MinimizedAppsState? minimizedAppsOf(String deviceId) => _minimizedAppsPlugin.stateOf(deviceId);
+  MinimizedAppsState? minimizedAppsOf(String deviceId) =>
+      _minimizedAppsPlugin.stateOf(deviceId);
 
   /// The latest media state reported by a peer, or null if none yet.
   MediaState? mediaOf(String deviceId) => _mediaPlugin.mediaOf(deviceId);
 
   /// The peer's playback position interpolated forward to "now" — see
   /// MediaPlugin.interpolatedMediaOf for why this is needed.
-  MediaState? interpolatedMediaOf(String deviceId) => _mediaPlugin.interpolatedMediaOf(deviceId);
+  MediaState? interpolatedMediaOf(String deviceId) =>
+      _mediaPlugin.interpolatedMediaOf(deviceId);
 
   /// Sends one remote-input event to a device, if it is connected.
   Future<void> sendRemoteInput(String deviceId, RemoteInput input) async {
@@ -472,7 +494,10 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   /// deliberate, named action the user just tapped, so a shell command
   /// blocked by the peer's AllowAutomation setting (or any other failure)
   /// should not look identical to it having quietly worked.
-  Future<void> sendWorkspaceAction(String deviceId, WorkspaceAction action) async {
+  Future<void> sendWorkspaceAction(
+    String deviceId,
+    WorkspaceAction action,
+  ) async {
     try {
       await _manager.sendTo(deviceId, action.toJson());
     } catch (error) {
@@ -485,13 +510,22 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   /// failure handling as sendWorkspaceAction, since this is also a
   /// deliberate, named action the user just tapped.
   Future<void> restoreWindow(String deviceId, int windowId) =>
-      sendWorkspaceAction(deviceId, WorkspaceAction(action: WorkspaceActionType.restoreWindow, windowId: windowId));
+      sendWorkspaceAction(
+        deviceId,
+        WorkspaceAction(
+          action: WorkspaceActionType.restoreWindow,
+          windowId: windowId,
+        ),
+      );
 
   /// Asks the peer to open its App Actions editor for an app with no
   /// Dynamic Controls profile yet — tapping "Configure this app".
   Future<void> requestConfigureApp(String deviceId, String appName) async {
     try {
-      await _manager.sendTo(deviceId, ConfigureAppRequest(appName: appName).toJson());
+      await _manager.sendTo(
+        deviceId,
+        ConfigureAppRequest(appName: appName).toJson(),
+      );
     } catch (error) {
       final name = _store.trusted(deviceId)?.name ?? 'that device';
       _toastController.add('Could not reach $name: $error');
@@ -511,21 +545,30 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
 
   /// This device's own "My Workspace" buttons, authored entirely on the
   /// desktop — read-only here, in the order the desktop sent them.
-  List<WorkspaceButtonDef> workspaceButtonsOf(String deviceId) => _workspaceButtonsPlugin.buttonsOf(deviceId);
+  List<WorkspaceButtonDef> workspaceButtonsOf(String deviceId) =>
+      _workspaceButtonsPlugin.buttonsOf(deviceId);
 
   /// This device's saved Workspace-tab layouts (auto-creating "Default" on
   /// first access).
-  List<WorkspaceLayout> workspaceLayoutsFor(String deviceId) => _store.layoutsFor(deviceId);
+  List<WorkspaceLayout> workspaceLayoutsFor(String deviceId) =>
+      _store.layoutsFor(deviceId);
 
   /// The layout currently shown for this device.
-  WorkspaceLayout activeWorkspaceLayoutFor(String deviceId) => _store.activeLayoutFor(deviceId);
+  WorkspaceLayout activeWorkspaceLayoutFor(String deviceId) =>
+      _store.activeLayoutFor(deviceId);
 
-  Future<void> saveWorkspaceLayouts(String deviceId, List<WorkspaceLayout> layouts) async {
+  Future<void> saveWorkspaceLayouts(
+    String deviceId,
+    List<WorkspaceLayout> layouts,
+  ) async {
     await _store.saveLayouts(deviceId, layouts);
     notifyListeners();
   }
 
-  Future<void> setActiveWorkspaceLayout(String deviceId, String layoutId) async {
+  Future<void> setActiveWorkspaceLayout(
+    String deviceId,
+    String layoutId,
+  ) async {
     await _store.setActiveLayout(deviceId, layoutId);
     notifyListeners();
   }
@@ -545,13 +588,19 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
 
   Future<PairingDecision> _onPairingRequest(PairingRequest request) async {
     if (!settings.acceptNewPairing) {
-      return const PairingDecision(false, 'this device is not accepting new pairings');
+      return const PairingDecision(
+        false,
+        'this device is not accepting new pairings',
+      );
     }
     // One at a time: a second request while the user is deciding is refused
     // rather than queued, so nobody can bury a malicious request under a
     // legitimate one.
     if (pairingPrompt != null) {
-      return const PairingDecision(false, 'another pairing request is already open');
+      return const PairingDecision(
+        false,
+        'another pairing request is already open',
+      );
     }
 
     final completer = Completer<PairingDecision>();
@@ -579,26 +628,28 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     if (decision.accepted) {
       // Store the key proved during the handshake, never one from a UDP
       // announcement — announcements are unauthenticated and easily forged.
-      await _store.addTrusted(TrustedDevice(
-        deviceId: request.deviceId,
-        name: request.name,
-        platform: request.platform,
-        formFactor: request.formFactor,
-        publicKey: request.publicKey,
-      ));
+      await _store.addTrusted(
+        TrustedDevice(
+          deviceId: request.deviceId,
+          name: request.name,
+          platform: request.platform,
+          formFactor: request.formFactor,
+          publicKey: request.publicKey,
+        ),
+      );
       _toastController.add('${request.name} joined your ecosystem');
       notifyListeners();
     }
     return decision;
   }
 
-
   // ---------------------------------------------------------- user actions
 
   /// Asks a discovered device to join this ecosystem.
   Future<void> pairWith(String targetDeviceId) async {
     final peer = _discovery.peer(targetDeviceId);
-    if (peer == null) throw Exception('that device is no longer on the network');
+    if (peer == null)
+      throw Exception('that device is no longer on the network');
     if (_store.isTrusted(targetDeviceId)) {
       throw Exception('${peer.name} is already in your ecosystem');
     }
@@ -618,23 +669,29 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
       outgoingPairingCode = result.verificationCode;
       notifyListeners();
 
-      final reply = await result.connection.readJson().timeout(const Duration(seconds: 90));
+      final reply = await result.connection.readJson().timeout(
+        const Duration(seconds: 90),
+      );
       if (reply['accepted'] != true) {
         final reason = reply['reason'] as String? ?? '';
         throw Exception(
-          reason.isEmpty ? '${peer.name} declined the request' : '${peer.name} declined: $reason',
+          reason.isEmpty
+              ? '${peer.name} declined the request'
+              : '${peer.name} declined: $reason',
         );
       }
 
-      await _store.addTrusted(TrustedDevice(
-        deviceId: targetDeviceId,
-        name: (reply['name'] as String?)?.isNotEmpty == true
-            ? reply['name'] as String
-            : peer.name,
-        platform: peer.platform,
-        formFactor: peer.formFactor,
-        publicKey: result.peerPublicKey,
-      ));
+      await _store.addTrusted(
+        TrustedDevice(
+          deviceId: targetDeviceId,
+          name: (reply['name'] as String?)?.isNotEmpty == true
+              ? reply['name'] as String
+              : peer.name,
+          platform: peer.platform,
+          formFactor: peer.formFactor,
+          publicKey: result.peerPublicKey,
+        ),
+      );
 
       _manager.reconnectNow(targetDeviceId);
       _toastController.add('${peer.name} joined your ecosystem');
@@ -650,11 +707,14 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   void respondToPairing(bool accept) {
     final prompt = pairingPrompt;
     if (prompt == null || prompt.completer.isCompleted) return;
-    prompt.completer.complete(PairingDecision(accept, accept ? '' : 'declined'));
+    prompt.completer.complete(
+      PairingDecision(accept, accept ? '' : 'declined'),
+    );
   }
 
   /// Answers the pending incoming file prompt.
-  void respondToIncomingFile(bool accept) => _filesPlugin.respondToIncomingFile(accept);
+  void respondToIncomingFile(bool accept) =>
+      _filesPlugin.respondToIncomingFile(accept);
 
   /// Removes a device and tells it, so both sides forget each other.
   Future<void> unpair(String targetDeviceId) async {
@@ -671,7 +731,11 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     notifyListeners();
   }
 
-  Future<void> setPermission(String targetDeviceId, String capability, bool allowed) async {
+  Future<void> setPermission(
+    String targetDeviceId,
+    String capability,
+    bool allowed,
+  ) async {
     await _store.setPermission(targetDeviceId, capability, allowed);
     notifyListeners();
   }
@@ -794,14 +858,16 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
     if (trimmed.isEmpty) throw Exception('the device name cannot be empty');
 
     await _store.setDeviceName(trimmed);
-    _discovery.updateConfig(DiscoveryMessage(
-      deviceId: deviceId,
-      name: trimmed,
-      platform: Platform.operatingSystem,
-      formFactor: FormFactor.phone,
-      tcpPort: _manager.port,
-      publicKey: publicKey,
-    ));
+    _discovery.updateConfig(
+      DiscoveryMessage(
+        deviceId: deviceId,
+        name: trimmed,
+        platform: Platform.operatingSystem,
+        formFactor: FormFactor.phone,
+        tcpPort: _manager.port,
+        publicKey: publicKey,
+      ),
+    );
     await _manager.broadcastDeviceInfo();
     notifyListeners();
   }
@@ -822,7 +888,7 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   }
 
   void clearNotifications() {
-    notifications.clear();
+    _notifsPlugin.clear();
     notifyListeners();
   }
 
@@ -862,6 +928,8 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   void dispose() {
     _mediaTicker?.cancel();
     _nativeEvents?.cancel();
+    _onPeerSub?.cancel();
+    _onPeerLostSub?.cancel();
     // Only tear down the network stack if it actually came up; a startup that
     // failed early leaves these late fields unset.
     if (_started) {
@@ -906,7 +974,8 @@ class _PluginHost implements PluginHost {
   }
 
   @override
-  bool allows(String deviceId, String capability) => _service._store.allows(deviceId, capability);
+  bool allows(String deviceId, String capability) =>
+      _service._store.allows(deviceId, capability);
 
   @override
   void emit(PluginEvent event) {
@@ -926,7 +995,8 @@ class _PluginHost implements PluginHost {
   Future<HandshakeResult> dialTransfer(String deviceId) async {
     final peer = _service._discovery.peer(deviceId);
     final key = _service._store.trustedKey(deviceId);
-    if (peer == null) throw Exception('that device is not on the network right now');
+    if (peer == null)
+      throw Exception('that device is not on the network right now');
     if (key == null) throw Exception('that device is not in your ecosystem');
 
     return dialHandshake(
@@ -970,6 +1040,8 @@ class _PluginHost implements PluginHost {
   }
 
   @override
-  Future<void> savePluginSettings(PluginId id, Map<String, dynamic> data) async {}
+  Future<void> savePluginSettings(
+    PluginId id,
+    Map<String, dynamic> data,
+  ) async {}
 }
-

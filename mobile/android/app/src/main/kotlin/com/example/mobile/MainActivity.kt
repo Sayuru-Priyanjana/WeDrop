@@ -78,10 +78,6 @@ class MainActivity : FlutterActivity() {
                         WeDropService.start(this, status)
                         result.success(null)
                     }
-                    "stopService" -> {
-                        WeDropService.stop(this)
-                        result.success(null)
-                    }
                     "updateStatus" -> {
                         WeDropService.updateStatus(this, call.argument<String>("status") ?: "")
                         result.success(null)
