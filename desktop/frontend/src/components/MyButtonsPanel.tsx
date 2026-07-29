@@ -1,22 +1,12 @@
 import { useEffect, useState } from "react";
 import { protocol } from "../../wailsjs/go/models";
-import { Button, Card, IconButton, SectionTitle } from "./ui";
+import { Button, Card, IconButton, SectionTitle, IconPicker, ICON_KEYS } from "./ui";
 import { ShortcutRecorder } from "./ShortcutRecorder";
 import { IconPlus, IconTrash } from "../lib/icons";
 
-const ICON_KEYS = [
-  "bolt", "terminal", "code", "folder", "globe", "apps", "keyboard", "save",
-  "search", "refresh", "star", "settings", "music", "camera", "mail", "chat",
-  "lock", "power", "link", "file", "download", "upload", "play", "brush",
-  "build", "database", "cloud", "home", "calendar", "note", "calculate",
-  "timer", "rocket", "shield", "bug", "monitor", "grid", "undo", "redo",
-  "git", "run", "debug", "back", "forward", "copy", "paste", "cut",
-  "selectall", "close",
-];
-
 const PALETTE = [
-  "#6D78F5", "#B48AF0", "#5F9E82", "#E0A34E", "#E5706F",
-  "#5E9BF0", "#A6AFFF", "#E08A6A",
+  "#111111", "#333333", "#555555", "#777777",
+  "#999999", "#BBBBBB", "#DDDDDD", "#FFFFFF",
 ];
 
 const ACTION_TYPES: { value: string; label: string }[] = [
@@ -26,6 +16,8 @@ const ACTION_TYPES: { value: string; label: string }[] = [
   { value: "open_url", label: "Open website" },
   { value: "shell_command", label: "Shell command" },
 ];
+
+
 
 const inputClass =
   "w-full rounded-xl border border-border bg-bg-soft px-3 py-1.5 text-[13px] text-ink outline-none transition-colors focus:border-brand";
@@ -110,21 +102,22 @@ export function MyButtonsPanel({
 
       <div className="max-w-2xl space-y-3">
         {draft.map((button, i) => (
-          <ButtonRow
-            key={button.id}
-            button={button}
-            onChange={(next) => update((d) => d.map((b, j) => (j === i ? next : b)))}
-            onRemove={() => update((d) => d.filter((_, j) => j !== i))}
-            onMove={(delta) =>
-              update((d) => {
-                const j = i + delta;
-                if (j < 0 || j >= d.length) return d;
-                const copy = [...d];
-                [copy[i], copy[j]] = [copy[j], copy[i]];
-                return copy;
-              })
-            }
-          />
+          <div key={button.id} className="relative" style={{ zIndex: draft.length - i }}>
+            <ButtonRow
+              button={button}
+              onChange={(next) => update((d) => d.map((b, j) => (j === i ? next : b)))}
+              onRemove={() => update((d) => d.filter((_, j) => j !== i))}
+              onMove={(delta) =>
+                update((d) => {
+                  const j = i + delta;
+                  if (j < 0 || j >= d.length) return d;
+                  const copy = [...d];
+                  [copy[i], copy[j]] = [copy[j], copy[i]];
+                  return copy;
+                })
+              }
+            />
+          </div>
         ))}
       </div>
 
@@ -176,17 +169,7 @@ function ButtonRow({
               onChange={(e) => onChange({ ...button, label: e.target.value })}
               placeholder="Label"
             />
-            <select
-              className={`${inputClass} max-w-[9rem]`}
-              value={button.icon}
-              onChange={(e) => onChange({ ...button, icon: e.target.value })}
-            >
-              {ICON_KEYS.map((key) => (
-                <option key={key} value={key}>
-                  {key}
-                </option>
-              ))}
-            </select>
+            <IconPicker value={button.icon} onChange={(icon) => onChange({ ...button, icon })} />
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

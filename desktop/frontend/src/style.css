@@ -4,24 +4,24 @@
    background with muted, low-saturation accents, matched to the mobile
    app's own WeDropColors so the two read as one product. */
 @theme {
-  --color-bg: #070708;
-  --color-bg-soft: #0a0a0c;
-  --color-surface: #0e0e10;
-  --color-surface-hi: #17171a;
-  --color-border: #232326;
-  --color-border-hi: #2e2e33;
+  --color-bg: #121212;
+  --color-bg-soft: #181818;
+  --color-surface: #242424;
+  --color-surface-hi: #333333;
+  --color-border: #333333;
+  --color-border-hi: #4F4F4F;
 
-  --color-brand: #6d78f5;
-  --color-brand-soft: #a6afff;
-  --color-accent: #b48af0;
-  --color-success: #5f9e82;
-  --color-warn: #e0a34e;
-  --color-danger: #e5706f;
-  --color-info: #5e9bf0;
+  --color-brand: #10B981;
+  --color-brand-soft: #34D399;
+  --color-accent: #10B981;
+  --color-success: #10B981;
+  --color-warn: #F59E0B;
+  --color-danger: #EF4444;
+  --color-info: #FFFFFF;
 
-  --color-ink: #f2f3f5;
-  --color-ink-dim: #8a8e98;
-  --color-ink-faint: #6a6e78;
+  --color-ink: #FFFFFF;
+  --color-ink-dim: #E0E0E0;
+  --color-ink-faint: #BDBDBD;
 
   --font-sans: "Plus Jakarta Sans", "Segoe UI", system-ui, -apple-system,
     sans-serif;

@@ -69,7 +69,7 @@ func DefaultSettings() Settings {
 		RunInBackground:      true,
 		StartOnLogin:         false,
 		StartMinimized:       false,
-		ShowAdvancedFeatures: false,
+		ShowAdvancedFeatures: true,
 	}
 }
 

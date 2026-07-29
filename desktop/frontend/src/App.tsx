@@ -228,7 +228,7 @@ export default function App() {
 
       <main className="relative flex-1 overflow-y-auto">
         {/* A soft glow anchors the layout without competing with content. */}
-        <div className="pointer-events-none absolute -top-40 right-0 h-[420px] w-[420px] rounded-full bg-brand/12 blur-[130px]" />
+
 
         <div className="relative mx-auto max-w-5xl px-10 py-9">
           {tab === "devices" && (
@@ -370,10 +370,10 @@ function Sidebar({
   return (
     <aside className="flex w-[248px] shrink-0 flex-col border-r border-border bg-bg-soft/80 px-5 py-7">
       <div className="mb-9 flex items-center gap-3 px-1">
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-accent shadow-lg shadow-brand/25">
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-ink text-bg">
           <svg
             viewBox="0 0 24 24"
-            className="h-5 w-5 text-white"
+            className="h-5 w-5"
             fill="none"
             stroke="currentColor"
             strokeWidth={2}
@@ -401,7 +401,7 @@ function Sidebar({
               onClick={() => onTab(id)}
               className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-[13.5px] transition-all duration-200 ${
                 active
-                  ? "bg-brand/12 font-medium text-brand-soft"
+                  ? "bg-ink/10 font-medium text-ink"
                   : "text-ink-dim hover:bg-surface-hi hover:text-ink"
               }`}
             >

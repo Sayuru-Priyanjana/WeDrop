@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { adaptivecontrols } from "../../wailsjs/go/models";
-import { Badge, Button, Card, EmptyState, IconButton, SectionTitle } from "./ui";
+import { Badge, Button, Card, EmptyState, IconButton, SectionTitle, IconPicker, ICON_KEYS } from "./ui";
 import { ShortcutRecorder } from "./ShortcutRecorder";
 import { IconGrid, IconPlus, IconTrash } from "../lib/icons";
 
@@ -32,23 +32,10 @@ interface ProfileDraft {
   actions: ActionDraft[];
 }
 
-/** Same curated icon-key vocabulary as mobile's kWorkspaceIcons
- * (mobile/lib/ui/workspace_tab.dart) — a shared string vocabulary, not a
- * platform icon reference, so both clients render a button the same way. */
-const ICON_KEYS = [
-  "bolt", "terminal", "code", "folder", "globe", "apps", "keyboard", "save",
-  "search", "refresh", "star", "settings", "music", "camera", "mail", "chat",
-  "lock", "power", "link", "file", "download", "upload", "play", "brush",
-  "build", "database", "cloud", "home", "calendar", "note", "calculate",
-  "timer", "rocket", "shield", "bug", "monitor", "grid", "undo", "redo",
-  "git", "run", "debug", "back", "forward", "copy", "paste", "cut",
-  "selectall", "close",
-];
-
-/** Same curated palette as mobile's kWorkspacePalette. */
+/** Monochrome palette for a sleek B&W look. */
 const PALETTE = [
-  "#6D78F5", "#B48AF0", "#5F9E82", "#E0A34E", "#E5706F",
-  "#5E9BF0", "#A6AFFF", "#E08A6A",
+  "#111111", "#333333", "#555555", "#777777",
+  "#999999", "#BBBBBB", "#DDDDDD", "#FFFFFF",
 ];
 
 const ACTION_TYPES: { value: string; label: string }[] = [
@@ -58,6 +45,8 @@ const ACTION_TYPES: { value: string; label: string }[] = [
   { value: "open_url", label: "Open website" },
   { value: "shell_command", label: "Shell command" },
 ];
+
+
 
 const inputClass =
   "w-full rounded-xl border border-border bg-bg-soft px-3 py-1.5 text-[13px] text-ink outline-none transition-colors focus:border-brand";
@@ -246,19 +235,20 @@ export function AppActionsPanel({
 
             <div className="space-y-3">
               {draft.actions.map((action, i) => (
-                <ActionRow
-                  key={action.id}
-                  action={action}
-                  onChange={(next) =>
-                    updateDraft((d) => ({
-                      ...d,
-                      actions: d.actions.map((a, j) => (j === i ? next : a)),
-                    }))
-                  }
-                  onRemove={() =>
-                    updateDraft((d) => ({ ...d, actions: d.actions.filter((_, j) => j !== i) }))
-                  }
-                />
+                <div key={action.id} className="relative" style={{ zIndex: draft.actions.length - i }}>
+                  <ActionRow
+                    action={action}
+                    onChange={(next) =>
+                      updateDraft((d) => ({
+                        ...d,
+                        actions: d.actions.map((a, j) => (j === i ? next : a)),
+                      }))
+                    }
+                    onRemove={() =>
+                      updateDraft((d) => ({ ...d, actions: d.actions.filter((_, j) => j !== i) }))
+                    }
+                  />
+                </div>
               ))}
             </div>
 
@@ -316,17 +306,7 @@ function ActionRow({
               onChange={(e) => onChange({ ...action, label: e.target.value })}
               placeholder="Label"
             />
-            <select
-              className={`${inputClass} max-w-[9rem]`}
-              value={action.icon}
-              onChange={(e) => onChange({ ...action, icon: e.target.value })}
-            >
-              {ICON_KEYS.map((key) => (
-                <option key={key} value={key}>
-                  {key}
-                </option>
-              ))}
-            </select>
+            <IconPicker value={action.icon} onChange={(icon) => onChange({ ...action, icon })} />
             {action.predefined && <Badge tone="brand">Predefined</Badge>}
           </div>
 
