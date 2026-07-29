@@ -6,24 +6,24 @@ import 'package:google_fonts/google_fonts.dart';
 /// near-black background with muted, low-saturation accents, extracted from
 /// the project's own design reference.
 class WeDropColors {
-  static const bg = Color(0xFF070708);
-  static const bgSoft = Color(0xFF0A0A0C);
-  static const surface = Color(0xFF0E0E10);
-  static const surfaceHi = Color(0xFF17171A);
-  static const border = Color(0xFF232326);
-  static const borderHi = Color(0xFF2E2E33);
+  static const bg = Color(0xFF121212); // Deep Charcoal (Material Dark)
+  static const bgSoft = Color(0xFF181818); 
+  static const surface = Color(0xFF242424); // Elevated surface
+  static const surfaceHi = Color(0xFF333333); // Higher elevated surface
+  static const border = Color(0xFF333333); // Subtle border
+  static const borderHi = Color(0xFF4F4F4F); // Visible border
 
-  static const brand = Color(0xFF6D78F5);
-  static const brandSoft = Color(0xFFA6AFFF);
-  static const accent = Color(0xFFB48AF0);
-  static const success = Color(0xFF5F9E82);
-  static const warn = Color(0xFFE0A34E);
-  static const danger = Color(0xFFE5706F);
-  static const info = Color(0xFF5E9BF0);
+  static const brand = Color(0xFF10B981); // Emerald Green Accent
+  static const brandSoft = Color(0xFF34D399); // Lighter Green
+  static const accent = Color(0xFF10B981); 
+  static const success = Color(0xFF10B981); // Emerald Green (Online/Battery)
+  static const warn = Color(0xFFF59E0B); // Amber
+  static const danger = Color(0xFFEF4444); // Red
+  static const info = Color(0xFFFFFFFF); // White
 
-  static const ink = Color(0xFFF2F3F5);
-  static const inkDim = Color(0xFF8A8E98);
-  static const inkFaint = Color(0xFF6A6E78);
+  static const ink = Color(0xFFFFFFFF); // Pure White Text
+  static const inkDim = Color(0xFFE0E0E0); // Bright Grey Text (High Contrast)
+  static const inkFaint = Color(0xFFBDBDBD); // Light Grey Text (Visible)
 }
 
 /// Spacing on a 4pt grid. Using these instead of ad-hoc numbers is what keeps
@@ -51,7 +51,7 @@ class Radii {
 class AppText {
   /// Card and row headings.
   static const title = TextStyle(
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: FontWeight.w600,
     color: WeDropColors.ink,
     letterSpacing: -0.1,
@@ -60,25 +60,25 @@ class AppText {
   /// The small uppercase heading that labels a section *inside* a card, as
   /// opposed to [SectionHeader], which titles a whole page section.
   static const eyebrow = TextStyle(
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: FontWeight.w600,
     color: WeDropColors.inkFaint,
     letterSpacing: 0.8,
   );
 
   /// Default reading size for list rows and primary values.
-  static const body = TextStyle(fontSize: 14, color: WeDropColors.ink);
+  static const body = TextStyle(fontSize: 12, color: WeDropColors.ink);
 
   /// Secondary text: subtitles, supporting detail.
-  static const label = TextStyle(fontSize: 13, color: WeDropColors.inkDim);
+  static const label = TextStyle(fontSize: 11, color: WeDropColors.inkDim);
 
   /// Tertiary text: timestamps, hints, units.
-  static const caption = TextStyle(fontSize: 12, color: WeDropColors.inkFaint);
+  static const caption = TextStyle(fontSize: 10, color: WeDropColors.inkFaint);
 
   /// Numeric readouts (timers, percentages) — tabular figures stop the text
   /// jittering horizontally as the digits tick over.
   static const numeric = TextStyle(
-    fontSize: 12,
+    fontSize: 10,
     color: WeDropColors.inkFaint,
     fontFeatures: [FontFeature.tabularFigures()],
   );
@@ -96,7 +96,7 @@ class AppText {
   /// subtitle) — reads slightly more present than [caption], for text
   /// that's secondary but not merely a hint.
   static const meta = TextStyle(
-    fontSize: 11.5,
+    fontSize: 9.5,
     fontWeight: FontWeight.w400,
     color: WeDropColors.inkFaint,
   );
@@ -158,7 +158,7 @@ ThemeData buildWeDropTheme() {
         foregroundColor: Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+        textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
@@ -217,14 +217,14 @@ ThemeData buildWeDropTheme() {
       // screen itself, not a step lighter.
       backgroundColor: WeDropColors.bg,
       surfaceTintColor: Colors.transparent,
-      indicatorColor: WeDropColors.brand.withValues(alpha: 0.16),
+      indicatorColor: Colors.white,
       height: 68,
       labelTextStyle: WidgetStateProperty.resolveWith(
         (states) => TextStyle(
-          fontSize: 11.5,
+          fontSize: 9.5,
           fontWeight: FontWeight.w500,
           color: states.contains(WidgetState.selected)
-              ? WeDropColors.brandSoft
+              ? Colors.white
               : WeDropColors.inkFaint,
         ),
       ),
@@ -232,7 +232,7 @@ ThemeData buildWeDropTheme() {
         (states) => IconThemeData(
           size: 22,
           color: states.contains(WidgetState.selected)
-              ? WeDropColors.brandSoft
+              ? Colors.black
               : WeDropColors.inkFaint,
         ),
       ),

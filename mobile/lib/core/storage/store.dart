@@ -69,7 +69,7 @@ class Settings {
     this.allowAutomation = false,
     this.discoverable = true,
     this.acceptNewPairing = true,
-    this.showAdvancedFeatures = false,
+    this.showAdvancedFeatures = true,
   });
 
   /// The capabilities advertised to peers, derived from the receive switches so
@@ -111,7 +111,7 @@ class Settings {
     allowAutomation: json['allow_automation'] as bool? ?? false,
     discoverable: json['discoverable'] as bool? ?? true,
     acceptNewPairing: json['accept_new_pairing'] as bool? ?? true,
-    showAdvancedFeatures: json['show_advanced_features'] as bool? ?? false,
+    showAdvancedFeatures: json['show_advanced_features'] as bool? ?? true,
   );
 
   Settings copy() => Settings.fromJson(toJson());

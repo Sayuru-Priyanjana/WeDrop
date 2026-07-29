@@ -191,8 +191,9 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
       // faced with three devices all called "My Phone".
       if (_store.deviceName == 'My Phone') {
         final model = await NativeBridge.deviceModelName();
-        if (model != null && model.isNotEmpty)
+        if (model != null && model.isNotEmpty) {
           await _store.setDeviceName(model);
+        }
       }
 
       final dir = await _resolveDownloadDir();
@@ -335,8 +336,9 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
       // Downloads/WeDrop is where a user would look for a received file; the
       // app's own directory is the fallback when it is not reachable.
       final downloads = await getDownloadsDirectory();
-      if (downloads != null)
+      if (downloads != null) {
         return '${downloads.path}${Platform.pathSeparator}WeDrop';
+      }
     } catch (_) {}
 
     final docs = await getApplicationDocumentsDirectory();
@@ -648,8 +650,9 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   /// Asks a discovered device to join this ecosystem.
   Future<void> pairWith(String targetDeviceId) async {
     final peer = _discovery.peer(targetDeviceId);
-    if (peer == null)
+    if (peer == null) {
       throw Exception('that device is no longer on the network');
+    }
     if (_store.isTrusted(targetDeviceId)) {
       throw Exception('${peer.name} is already in your ecosystem');
     }
@@ -995,8 +998,9 @@ class _PluginHost implements PluginHost {
   Future<HandshakeResult> dialTransfer(String deviceId) async {
     final peer = _service._discovery.peer(deviceId);
     final key = _service._store.trustedKey(deviceId);
-    if (peer == null)
+    if (peer == null) {
       throw Exception('that device is not on the network right now');
+    }
     if (key == null) throw Exception('that device is not in your ecosystem');
 
     return dialHandshake(

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
@@ -206,7 +207,7 @@ class WdAppBarTitle extends StatelessWidget {
               Text(
                 subtitle,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: 11,
                   fontWeight: FontWeight.w500,
                   color: subtitleColor,
                 ),
@@ -235,24 +236,28 @@ class WdCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // A literal translucent white-on-black overlay, not a tinted opaque
-    // surface colour — this is what actually reads as "black and clean"
-    // rather than just a darker version of the previous look.
-    return Material(
-      color: Colors.white.withValues(alpha: 0.028),
+    // A beautiful glassmorphic overlay for a professional look
+    return ClipRRect(
       borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Material(
+          color: Colors.white.withValues(alpha: 0.035),
+          borderRadius: BorderRadius.circular(20),
+          child: InkWell(
+            onTap: onTap,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: borderColor ?? Colors.white.withValues(alpha: 0.07),
+            child: Container(
+              padding: padding,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: borderColor ?? Colors.white.withValues(alpha: 0.08),
+                ),
+              ),
+              child: child,
             ),
           ),
-          child: child,
         ),
       ),
     );
@@ -297,7 +302,7 @@ class SectionHeader extends StatelessWidget {
                     child: Text(
                       hint!,
                       style: const TextStyle(
-                        fontSize: 13.5,
+                        fontSize: 11.5,
                         fontWeight: FontWeight.w500,
                         color: WeDropColors.inkDim,
                         height: 1.45,
@@ -523,9 +528,9 @@ class StatusDot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colour = switch (state) {
-      'connected' => WeDropColors.success,
-      'online' => WeDropColors.warn,
-      _ => WeDropColors.inkFaint.withValues(alpha: 0.6),
+      'connected' => WeDropColors.success, // Green
+      'online' => WeDropColors.warn, // Orange
+      _ => WeDropColors.ink, // White
     };
 
     return Container(
@@ -553,7 +558,7 @@ class WdBadge extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 11,
+          fontSize: 9,
           fontWeight: FontWeight.w600,
           color: colour,
         ),
@@ -578,16 +583,21 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 44),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: WeDropColors.border,
-          style: BorderStyle.solid,
-        ),
-      ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 44),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.02),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: WeDropColors.border,
+              style: BorderStyle.solid,
+            ),
+          ),
       child: Column(
         children: [
           Container(
@@ -604,7 +614,7 @@ class EmptyState extends StatelessWidget {
             title,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 14,
+              fontSize: 12,
               fontWeight: FontWeight.w500,
               color: WeDropColors.inkDim,
             ),
@@ -614,13 +624,15 @@ class EmptyState extends StatelessWidget {
             hint,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              fontSize: 12.5,
+              fontSize: 10.5,
               color: WeDropColors.inkFaint,
               height: 1.45,
             ),
           ),
           if (action != null) ...[const SizedBox(height: 18), action!],
         ],
+      ),
+        ),
       ),
     );
   }
@@ -717,7 +729,7 @@ class SettingTile extends StatelessWidget {
                 Text(
                   title,
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 12,
                     fontWeight: FontWeight.w500,
                     color: WeDropColors.ink,
                   ),
@@ -728,7 +740,7 @@ class SettingTile extends StatelessWidget {
                     child: Text(
                       description!,
                       style: const TextStyle(
-                        fontSize: 12.5,
+                        fontSize: 10.5,
                         color: WeDropColors.inkFaint,
                         height: 1.4,
                       ),
@@ -757,7 +769,7 @@ class VerificationCodeDisplay extends StatelessWidget {
         const Text(
           'VERIFICATION CODE',
           style: TextStyle(
-            fontSize: 11,
+            fontSize: 9,
             letterSpacing: 1.6,
             fontWeight: FontWeight.w600,
             color: WeDropColors.inkFaint,
@@ -823,7 +835,7 @@ class VerificationCodeDisplay extends StatelessWidget {
           'Only continue if the other device shows these same digits.',
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 10,
             color: WeDropColors.inkFaint,
             height: 1.4,
           ),

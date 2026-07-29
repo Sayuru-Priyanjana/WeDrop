@@ -236,8 +236,8 @@ class _NowPlayingCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 if (m.artwork.isNotEmpty) ...[
-                  ArtworkThumbnail(base64: m.artwork, size: 56),
-                  const SizedBox(width: 12),
+                  ArtworkThumbnail(base64: m.artwork, size: 80, radius: 8),
+                  const SizedBox(width: 16),
                 ],
                 Expanded(
                   child: Column(
@@ -260,22 +260,22 @@ class _NowPlayingCard extends StatelessWidget {
                             style: AppText.label,
                           ),
                         ),
+                      const SizedBox(height: 8),
+                      _ControllerSeekBar(
+                        position: m.position,
+                        duration: m.duration,
+                        onSeek: (target) => service.sendMediaCommand(
+                          device.deviceId,
+                          MediaCommand.seek,
+                          position: target,
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            _ControllerSeekBar(
-              position: m.position,
-              duration: m.duration,
-              onSeek: (target) => service.sendMediaCommand(
-                device.deviceId,
-                MediaCommand.seek,
-                position: target,
-              ),
-            ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 8),
           ] else
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
@@ -284,7 +284,6 @@ class _NowPlayingCard extends StatelessWidget {
                 style: TextStyle(fontSize: 13, color: WeDropColors.inkFaint),
               ),
             ),
-          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -314,7 +313,7 @@ class _NowPlayingCard extends StatelessWidget {
       );
     }
     return Material(
-      color: WeDropColors.brand,
+      color: Colors.white,
       shape: const CircleBorder(),
       child: InkWell(
         onTap: () => service.sendMediaCommand(device.deviceId, command),
@@ -322,7 +321,7 @@ class _NowPlayingCard extends StatelessWidget {
         child: SizedBox(
           width: 56,
           height: 56,
-          child: Icon(icon, size: 28, color: Colors.white),
+          child: Icon(icon, size: 28, color: Colors.black),
         ),
       ),
     );
@@ -376,7 +375,7 @@ class _ControllerSeekBarState extends State<_ControllerSeekBar> {
         child: const LinearProgressIndicator(
           minHeight: 4,
           backgroundColor: WeDropColors.border,
-          valueColor: AlwaysStoppedAnimation(WeDropColors.brand),
+          valueColor: AlwaysStoppedAnimation(Colors.white),
         ),
       );
     }
@@ -391,9 +390,9 @@ class _ControllerSeekBarState extends State<_ControllerSeekBar> {
             trackHeight: 3,
             thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
             overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-            activeTrackColor: WeDropColors.brand,
+            activeTrackColor: Colors.white,
             inactiveTrackColor: WeDropColors.border,
-            thumbColor: WeDropColors.brand,
+            thumbColor: Colors.white,
           ),
           child: Slider(
             min: 0,
@@ -483,9 +482,9 @@ class _SystemVolumeCardState extends State<_SystemVolumeCard> {
                           thumbShape: const RoundSliderThumbShape(
                             enabledThumbRadius: 7,
                           ),
-                          activeTrackColor: WeDropColors.brand,
+                          activeTrackColor: Colors.white,
                           inactiveTrackColor: WeDropColors.border,
-                          thumbColor: WeDropColors.brand,
+                          thumbColor: Colors.white,
                         ),
                         child: Slider(
                           min: 0,
@@ -593,11 +592,11 @@ class _AppVolumeRowState extends State<_AppVolumeRow> {
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
                 activeTrackColor: widget.app.muted
                     ? WeDropColors.inkFaint
-                    : WeDropColors.accent,
+                    : Colors.white,
                 inactiveTrackColor: WeDropColors.border,
                 thumbColor: widget.app.muted
                     ? WeDropColors.inkFaint
-                    : WeDropColors.accent,
+                    : Colors.white,
               ),
               child: Slider(
                 min: 0,
