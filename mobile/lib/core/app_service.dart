@@ -393,13 +393,12 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
         // The native side just brought the app's window to the foreground
         // (see NotificationActionReceiver.ACTION_SEND_CLIPBOARD) so this can
         // actually read the clipboard, but that focus change trails this
-        // event by a moment on some Android versions — same settle used by
-        // resyncOnResume for the identical restriction.
-        Future<void>.delayed(const Duration(milliseconds: 300), () {
-          pushClipboard().catchError((error) {
-            _toastController.add(error.toString());
-          });
-        });
+        // event by a moment on some Android versions — a single fixed delay
+        // was not always enough (a cold-started process launching a fresh
+        // Activity and reattaching the Flutter engine can easily take longer
+        // than 300ms end to end), so this retries a few times instead of
+        // gambling on one attempt.
+        _retryPushClipboard();
         break;
       case 'media':
         final targetDeviceId = event['device_id'] as String?;
@@ -685,6 +684,28 @@ class AppService extends ChangeNotifier implements PeerAuthorizer {
   Future<void> pushClipboard() async {
     await _clipPlugin.pushNow();
     _toastController.add('Clipboard sent');
+  }
+
+  /// Retries [pushClipboard] a few times, spaced out, before giving up and
+  /// surfacing the failure — used right after a notification action brings
+  /// the app to the foreground, since Android's "clipboard reads need focus"
+  /// restriction can take longer than any single fixed delay to actually
+  /// land, especially when this is what cold-started the process.
+  Future<void> _retryPushClipboard() async {
+    const maxAttempts = 6;
+    const gap = Duration(milliseconds: 250);
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      await Future<void>.delayed(gap);
+      try {
+        await pushClipboard();
+        return;
+      } catch (error) {
+        if (attempt == maxAttempts - 1) {
+          _toastController.add(error.toString());
+        }
+        // Otherwise: focus most likely hasn't landed yet — try again.
+      }
+    }
   }
 
   Future<void> copyToClipboard(String text) => _clipPlugin.setClipboard(text);

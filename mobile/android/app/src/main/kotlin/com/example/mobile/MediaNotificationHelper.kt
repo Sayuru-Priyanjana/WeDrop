@@ -36,6 +36,14 @@ object MediaNotificationHelper {
     private var session: MediaSessionCompat? = null
     private var currentDeviceId: String = ""
 
+    // show() is called roughly once a second (whenever the peer's playback
+    // position ticks), but the artwork bytes only actually change when the
+    // track does. Without this cache, decodeArtwork() re-decoded the same
+    // JPEG on every single tick, which is what was behind the repeated HWUI
+    // "Image decoding logging dropped!" spam.
+    private var cachedArtworkBase64: String? = null
+    private var cachedArtworkBitmap: Bitmap? = null
+
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -169,12 +177,16 @@ object MediaNotificationHelper {
 
     private fun decodeArtwork(base64: String): Bitmap? {
         if (base64.isEmpty()) return null
-        return try {
+        if (base64 == cachedArtworkBase64) return cachedArtworkBitmap
+        val decoded = try {
             val bytes = Base64.decode(base64, Base64.NO_WRAP)
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
         } catch (e: Exception) {
             null
         }
+        cachedArtworkBase64 = base64
+        cachedArtworkBitmap = decoded
+        return decoded
     }
 
     fun clear(context: Context) {

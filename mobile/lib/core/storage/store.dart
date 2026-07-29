@@ -233,6 +233,7 @@ class WidgetType {
   static const adaptiveControls = 'adaptive_controls';
   static const minimizedApps = 'minimized_apps';
   static const buttons = 'buttons';
+  static const mediaController = 'media_controller';
 
   /// Display name and icon key (into ui/workspace_tab.dart's kWorkspaceIcons)
   /// for the "add widget" store — kept next to the type constants so a new
@@ -242,15 +243,17 @@ class WidgetType {
     adaptiveControls: 'Dynamic controls',
     minimizedApps: 'Minimized apps',
     buttons: 'My buttons',
+    mediaController: 'Media controller',
   };
   static const Map<String, String> icons = {
     desktopSwitcher: 'monitor',
     adaptiveControls: 'bolt',
     minimizedApps: 'apps',
     buttons: 'grid',
+    mediaController: 'music',
   };
 
-  static const all = [desktopSwitcher, adaptiveControls, minimizedApps, buttons];
+  static const all = [desktopSwitcher, adaptiveControls, minimizedApps, buttons, mediaController];
 }
 
 /// How much horizontal space a widget takes in its layout — full width, or
@@ -321,7 +324,12 @@ WorkspaceLayout _defaultLayout() => WorkspaceLayout(
       id: 'default',
       name: 'Default',
       widgets: [
-        WidgetInstance(id: 'default_switcher', type: WidgetType.desktopSwitcher, order: 0),
+        WidgetInstance(
+          id: 'default_switcher',
+          type: WidgetType.desktopSwitcher,
+          size: WidgetSize.compact,
+          order: 0,
+        ),
         WidgetInstance(id: 'default_minimized', type: WidgetType.minimizedApps, order: 1),
         WidgetInstance(id: 'default_adaptive', type: WidgetType.adaptiveControls, order: 2),
         WidgetInstance(id: 'default_buttons', type: WidgetType.buttons, order: 3),

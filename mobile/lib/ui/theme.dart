@@ -78,6 +78,24 @@ class AppText {
     color: WeDropColors.inkFaint,
     fontFeatures: [FontFeature.tabularFigures()],
   );
+
+  /// Page-level section heading — a whole screen section's title, one step
+  /// up from [title] (a card or row's own heading).
+  static const sectionTitle = TextStyle(
+    fontSize: 17,
+    fontWeight: FontWeight.w600,
+    color: WeDropColors.ink,
+    letterSpacing: -0.2,
+  );
+
+  /// Secondary status text (a device's connection line, an app-bar
+  /// subtitle) — reads slightly more present than [caption], for text
+  /// that's secondary but not merely a hint.
+  static const meta = TextStyle(
+    fontSize: 11.5,
+    fontWeight: FontWeight.w400,
+    color: WeDropColors.inkFaint,
+  );
 }
 
 ThemeData buildWeDropTheme() {
@@ -110,12 +128,22 @@ ThemeData buildWeDropTheme() {
       ),
     ),
     textTheme: const TextTheme(
-      titleLarge: TextStyle(color: WeDropColors.ink, fontWeight: FontWeight.w600),
-      titleMedium: TextStyle(color: WeDropColors.ink, fontWeight: FontWeight.w600),
+      titleLarge: TextStyle(
+        color: WeDropColors.ink,
+        fontWeight: FontWeight.w600,
+      ),
+      titleMedium: TextStyle(
+        color: WeDropColors.ink,
+        fontWeight: FontWeight.w600,
+      ),
       bodyMedium: TextStyle(color: WeDropColors.inkDim, height: 1.45),
       bodySmall: TextStyle(color: WeDropColors.inkFaint, height: 1.4),
     ),
-    dividerTheme: const DividerThemeData(color: WeDropColors.border, thickness: 1, space: 1),
+    dividerTheme: const DividerThemeData(
+      color: WeDropColors.border,
+      thickness: 1,
+      space: 1,
+    ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: WeDropColors.brand,
@@ -130,11 +158,14 @@ ThemeData buildWeDropTheme() {
     ),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected) ? Colors.white : WeDropColors.inkFaint,
+        (states) => states.contains(WidgetState.selected)
+            ? Colors.white
+            : WeDropColors.inkFaint,
       ),
       trackColor: WidgetStateProperty.resolveWith(
-        (states) =>
-            states.contains(WidgetState.selected) ? WeDropColors.brand : WeDropColors.border,
+        (states) => states.contains(WidgetState.selected)
+            ? WeDropColors.brand
+            : WeDropColors.border,
       ),
       trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
     ),
@@ -239,5 +270,7 @@ String timeAgo(int millis) {
   final days = seconds ~/ 86400;
   if (days == 1) return 'yesterday';
   if (days < 30) return '${days}d ago';
-  return DateTime.fromMillisecondsSinceEpoch(millis).toString().split(' ').first;
+  return DateTime.fromMillisecondsSinceEpoch(
+    millis,
+  ).toString().split(' ').first;
 }

@@ -62,12 +62,20 @@ const ACTION_TYPES: { value: string; label: string }[] = [
 const inputClass =
   "w-full rounded-xl border border-border bg-bg-soft px-3 py-1.5 text-[13px] text-ink outline-none transition-colors focus:border-brand";
 
+function randomPaletteColor(): number {
+  const css = PALETTE[Math.floor(Math.random() * PALETTE.length)];
+  return 0xff000000 | parseInt(css.slice(1), 16);
+}
+
 function newAction(order: number): ActionDraft {
   return {
     id: `custom-${Date.now()}-${order}`,
     label: "New action",
     icon: "bolt",
-    color_value: 0,
+    // A random colour rather than "no override" (0) — a fresh action should
+    // already look like it belongs to the same varied set as the others,
+    // not default to a flat grey until someone manually cycles it.
+    color_value: randomPaletteColor(),
     predefined: false,
     action: { type: "workspace_action", action: "shortcut", modifiers: ["ctrl"], key: "" },
   };

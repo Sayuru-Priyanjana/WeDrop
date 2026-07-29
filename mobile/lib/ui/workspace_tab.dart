@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../core/app_service.dart';
 import '../core/protocol/messages.dart';
 import '../core/storage/store.dart';
+import 'media_controller_screen.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -96,13 +97,16 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
     _layout = widget.service.activeWorkspaceLayoutFor(_deviceId);
   }
 
-  void _persistLayouts() => widget.service.saveWorkspaceLayouts(_deviceId, _layouts);
+  void _persistLayouts() =>
+      widget.service.saveWorkspaceLayouts(_deviceId, _layouts);
 
   // ── Widget management (add/remove/resize/reorder within the layout) ──
 
   void _resizeWidget(WidgetInstance instance) {
     setState(() {
-      instance.size = instance.size == WidgetSize.compact ? WidgetSize.full : WidgetSize.compact;
+      instance.size = instance.size == WidgetSize.compact
+          ? WidgetSize.full
+          : WidgetSize.compact;
     });
     _persistLayouts();
   }
@@ -126,9 +130,31 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
     _persistLayouts();
   }
 
+  /// Drag-and-drop reorder: moves the dragged widget to sit where the target
+  /// widget currently is, shifting everything between them over by one — the
+  /// grid reflows around the new order on the very next build.
+  void _reorderWidgetTo(String draggedId, String targetId) {
+    if (draggedId == targetId) return;
+    setState(() {
+      final list = _layout.widgets..sort((a, b) => a.order.compareTo(b.order));
+      final draggedIdx = list.indexWhere((w) => w.id == draggedId);
+      final targetIdx = list.indexWhere((w) => w.id == targetId);
+      if (draggedIdx == -1 || targetIdx == -1) return;
+      final item = list.removeAt(draggedIdx);
+      final insertAt = draggedIdx < targetIdx ? targetIdx - 1 : targetIdx;
+      list.insert(insertAt, item);
+      for (var i = 0; i < list.length; i++) {
+        list[i].order = i;
+      }
+    });
+    _persistLayouts();
+  }
+
   Future<void> _openWidgetStore() async {
     final existingTypes = _layout.widgets.map((w) => w.type).toSet();
-    final available = WidgetType.all.where((t) => !existingTypes.contains(t)).toList();
+    final available = WidgetType.all
+        .where((t) => !existingTypes.contains(t))
+        .toList();
 
     final chosen = await showModalBottomSheet<String>(
       context: context,
@@ -138,18 +164,40 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Padding(
-              padding: EdgeInsets.fromLTRB(Space.lg, Space.lg, Space.lg, Space.sm),
-              child: Text('Add a widget', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: WeDropColors.ink)),
+              padding: EdgeInsets.fromLTRB(
+                Space.lg,
+                Space.lg,
+                Space.lg,
+                Space.sm,
+              ),
+              child: Text(
+                'Add a widget',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: WeDropColors.ink,
+                ),
+              ),
             ),
             if (available.isEmpty)
               const Padding(
                 padding: EdgeInsets.fromLTRB(Space.lg, 0, Space.lg, Space.lg),
-                child: Text('Every widget is already on this layout.', style: TextStyle(color: WeDropColors.inkFaint)),
+                child: Text(
+                  'Every widget is already on this layout.',
+                  style: TextStyle(color: WeDropColors.inkFaint),
+                ),
               ),
             for (final type in available)
               ListTile(
-                leading: Icon(kWorkspaceIcons[WidgetType.icons[type]] ?? Icons.widgets_rounded, color: WeDropColors.brandSoft),
-                title: Text(WidgetType.labels[type] ?? type, style: const TextStyle(color: WeDropColors.ink)),
+                leading: Icon(
+                  kWorkspaceIcons[WidgetType.icons[type]] ??
+                      Icons.widgets_rounded,
+                  color: WeDropColors.brandSoft,
+                ),
+                title: Text(
+                  WidgetType.labels[type] ?? type,
+                  style: const TextStyle(color: WeDropColors.ink),
+                ),
                 onTap: () => Navigator.pop(context, type),
               ),
             const SizedBox(height: Space.md),
@@ -160,7 +208,13 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
     if (chosen == null || !mounted) return;
 
     setState(() {
-      _layout.widgets.add(WidgetInstance(id: const Uuid().v4(), type: chosen, order: _layout.widgets.length));
+      _layout.widgets.add(
+        WidgetInstance(
+          id: const Uuid().v4(),
+          type: chosen,
+          order: _layout.widgets.length,
+        ),
+      );
     });
     _persistLayouts();
   }
@@ -168,15 +222,27 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
   // ── Layouts ──
 
   Future<void> _switchLayout(String layoutId) async {
-    setState(() => _layout = _layouts.firstWhere((l) => l.id == layoutId, orElse: () => _layouts.first));
+    setState(
+      () => _layout = _layouts.firstWhere(
+        (l) => l.id == layoutId,
+        orElse: () => _layouts.first,
+      ),
+    );
     await widget.service.setActiveWorkspaceLayout(_deviceId, _layout.id);
   }
 
   Future<void> _createLayout() async {
-    final name = await _promptForName(title: 'New layout', hint: 'e.g. Video editing');
+    final name = await _promptForName(
+      title: 'New layout',
+      hint: 'e.g. Video editing',
+    );
     if (name == null || name.isEmpty || !mounted) return;
 
-    final layout = WorkspaceLayout(id: const Uuid().v4(), name: name, widgets: []);
+    final layout = WorkspaceLayout(
+      id: const Uuid().v4(),
+      name: name,
+      widgets: [],
+    );
     setState(() {
       _layouts.add(layout);
       _layout = layout;
@@ -241,8 +307,14 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
           decoration: InputDecoration(labelText: 'Name', hintText: hint),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Save'),
+          ),
         ],
       ),
     );
@@ -277,7 +349,8 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
           child: EmptyState(
             icon: Icons.dashboard_customize_rounded,
             title: 'Workspace actions are off for this device',
-            hint: 'Turn on "Run workspace actions" in this device\'s permissions to use custom buttons.',
+            hint:
+                'Turn on "Run workspace actions" in this device\'s permissions to use custom buttons.',
           ),
         ),
       );
@@ -290,6 +363,7 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
       onResizeWidget: _resizeWidget,
       onRemoveWidget: _removeWidget,
       onMoveWidget: _moveWidget,
+      onReorderWidgets: _reorderWidgetTo,
       showWidgetMenus: true,
       layoutName: _layout.name,
       onOpenLayoutPicker: _openLayoutPicker,
@@ -298,7 +372,11 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
         tooltip: 'Full screen',
         onPressed: _openFullScreen,
         visualDensity: VisualDensity.compact,
-        icon: const Icon(Icons.open_in_full_rounded, size: 19, color: WeDropColors.inkDim),
+        icon: const Icon(
+          Icons.open_in_full_rounded,
+          size: 19,
+          color: WeDropColors.inkDim,
+        ),
       ),
     );
   }
@@ -309,7 +387,11 @@ class _WorkspaceTabState extends State<WorkspaceTab> {
 /// customization available here is picking a different saved layout; adding,
 /// resizing, or removing widgets (and editing button/app-action content)
 /// stays in the Widgets tab and the desktop app respectively.
-Future<void> openWorkspaceFullScreen(BuildContext context, AppService service, DeviceView device) {
+Future<void> openWorkspaceFullScreen(
+  BuildContext context,
+  AppService service,
+  DeviceView device,
+) {
   final layouts = service.workspaceLayoutsFor(device.deviceId);
   final activeId = service.activeWorkspaceLayoutFor(device.deviceId).id;
   return Navigator.of(context).push(
@@ -320,7 +402,8 @@ Future<void> openWorkspaceFullScreen(BuildContext context, AppService service, D
         device: device,
         layouts: layouts,
         initialLayoutId: activeId,
-        onLayoutChanged: (id) => service.setActiveWorkspaceLayout(device.deviceId, id),
+        onLayoutChanged: (id) =>
+            service.setActiveWorkspaceLayout(device.deviceId, id),
       ),
     ),
   );
@@ -338,6 +421,7 @@ class _WorkspaceBody extends StatelessWidget {
   final void Function(WidgetInstance) onResizeWidget;
   final void Function(WidgetInstance) onRemoveWidget;
   final void Function(WidgetInstance, int) onMoveWidget;
+  final void Function(String draggedId, String targetId) onReorderWidgets;
   final bool showWidgetMenus;
   final String layoutName;
   final VoidCallback? onOpenLayoutPicker;
@@ -351,6 +435,7 @@ class _WorkspaceBody extends StatelessWidget {
     required this.onResizeWidget,
     required this.onRemoveWidget,
     required this.onMoveWidget,
+    required this.onReorderWidgets,
     required this.showWidgetMenus,
     required this.layoutName,
     required this.onOpenLayoutPicker,
@@ -365,9 +450,14 @@ class _WorkspaceBody extends StatelessWidget {
     return null;
   }
 
-  void _runButton(WorkspaceButtonDef button) => service.sendWorkspaceAction(device.deviceId, button.action);
+  void _runButton(WorkspaceButtonDef button) =>
+      service.sendWorkspaceAction(device.deviceId, button.action);
 
-  Future<void> _openWidgetEditor(BuildContext context, WidgetInstance instance, {bool canResize = true}) {
+  Future<void> _openWidgetEditor(
+    BuildContext context,
+    WidgetInstance instance, {
+    bool canResize = true,
+  }) {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -379,27 +469,43 @@ class _WorkspaceBody extends StatelessWidget {
         onRemove: () => onRemoveWidget(instance),
         onMoveUp: () => onMoveWidget(instance, -1),
         onMoveDown: () => onMoveWidget(instance, 1),
-        buttonsPreview: instance.type == WidgetType.buttons ? service.workspaceButtonsOf(device.deviceId) : null,
-        onConfigureButtons:
-            instance.type == WidgetType.buttons ? () => service.requestConfigureButtons(device.deviceId) : null,
+        buttonsPreview: instance.type == WidgetType.buttons
+            ? service.workspaceButtonsOf(device.deviceId)
+            : null,
+        onConfigureButtons: instance.type == WidgetType.buttons
+            ? () => service.requestConfigureButtons(device.deviceId)
+            : null,
       ),
     );
   }
 
-  Widget? _menuFor(BuildContext context, WidgetInstance instance, {bool canResize = true}) {
+  Widget? _menuFor(
+    BuildContext context,
+    WidgetInstance instance, {
+    bool canResize = true,
+  }) {
     if (!showWidgetMenus) return null;
     return IconButton(
       tooltip: 'Edit widget',
       visualDensity: VisualDensity.compact,
-      icon: const Icon(Icons.tune_rounded, size: 18, color: WeDropColors.inkFaint),
-      onPressed: () => _openWidgetEditor(context, instance, canResize: canResize),
+      icon: const Icon(
+        Icons.tune_rounded,
+        size: 18,
+        color: WeDropColors.inkFaint,
+      ),
+      onPressed: () =>
+          _openWidgetEditor(context, instance, canResize: canResize),
     );
   }
 
   Widget _renderOther(BuildContext context, WidgetInstance instance) {
     switch (instance.type) {
       case WidgetType.desktopSwitcher:
-        return _DesktopSwitcherCard(service: service, device: device, menu: _menuFor(context, instance));
+        return _DesktopSwitcherCard(
+          service: service,
+          device: device,
+          menu: _menuFor(context, instance),
+        );
       case WidgetType.adaptiveControls:
         return _DynamicControlsCard(
           service: service,
@@ -414,42 +520,93 @@ class _WorkspaceBody extends StatelessWidget {
           state: service.minimizedAppsOf(device.deviceId),
           menu: _menuFor(context, instance),
         );
+      case WidgetType.mediaController:
+        return _MediaControllerCard(
+          service: service,
+          device: device,
+          media: service.interpolatedMediaOf(device.deviceId),
+          menu: _menuFor(context, instance),
+        );
     }
     return const SizedBox.shrink();
   }
 
+  /// Wraps one grid cell so it can be long-pressed and dragged onto another
+  /// cell to reorder — the drag handle is the whole card (a long press does
+  /// not conflict with the card's own taps/short-presses, e.g. the desktop
+  /// switcher's prev/next buttons or a minimized-window chip).
+  Widget _draggableCell(BuildContext context, WidgetInstance instance) {
+    final rendered = _renderOther(context, instance);
+    return LongPressDraggable<String>(
+      data: instance.id,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: Material(
+        color: Colors.transparent,
+        child: SizedBox(
+          width: instance.size == WidgetSize.compact ? 160 : 300,
+          child: Opacity(opacity: 0.85, child: rendered),
+        ),
+      ),
+      childWhenDragging: Opacity(opacity: 0.3, child: rendered),
+      child: DragTarget<String>(
+        onWillAcceptWithDetails: (details) => details.data != instance.id,
+        onAcceptWithDetails: (details) =>
+            onReorderWidgets(details.data, instance.id),
+        builder: (context, candidates, rejected) {
+          final hovering = candidates.isNotEmpty;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(Radii.card),
+              border: hovering
+                  ? Border.all(color: WeDropColors.brand, width: 2)
+                  : null,
+            ),
+            child: rendered,
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final sorted = [...layout.widgets]..sort((a, b) => a.order.compareTo(b.order));
+    final sorted = [...layout.widgets]
+      ..sort((a, b) => a.order.compareTo(b.order));
     final others = sorted.where((w) => w.type != WidgetType.buttons).toList();
     final buttonsInstance = _find(WidgetType.buttons);
     final buttons = service.workspaceButtonsOf(device.deviceId);
 
-    final rows = <Widget>[];
-    var i = 0;
-    while (i < others.length) {
-      final a = others[i];
-      final pairWithNext =
-          a.size == WidgetSize.compact && i + 1 < others.length && others[i + 1].size == WidgetSize.compact;
-      if (pairWithNext) {
-        final b = others[i + 1];
-        rows.add(Padding(
-          padding: const EdgeInsets.only(bottom: Space.sm),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: _renderOther(context, a)),
-              const SizedBox(width: Space.sm),
-              Expanded(child: _renderOther(context, b)),
-            ],
-          ),
-        ));
-        i += 2;
-      } else {
-        rows.add(Padding(padding: const EdgeInsets.only(bottom: Space.sm), child: _renderOther(context, a)));
-        i += 1;
-      }
-    }
+    // A real grid, not a column: any compact widget takes half a row and
+    // flows next to whichever other compact widget comes next in the list
+    // (Pinterest/tile style), rather than only pairing up when two compact
+    // widgets happen to sit next to each other. A full-size widget always
+    // gets its own row, since its width alone fills it. Reordering (in the
+    // Widgets tab, not the read-only full-screen "run mode") is drag-and-
+    // drop: a long-press on any widget picks it up, dropping it onto another
+    // slot swaps them — the grid reflows around the new order automatically,
+    // there is nothing further to "resize" by hand.
+    final grid = LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = Space.sm;
+        final halfWidth = (constraints.maxWidth - gap) / 2;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final w in others)
+              SizedBox(
+                width: w.size == WidgetSize.compact
+                    ? halfWidth
+                    : constraints.maxWidth,
+                child: showWidgetMenus
+                    ? _draggableCell(context, w)
+                    : _renderOther(context, w),
+              ),
+          ],
+        );
+      },
+    );
 
     return Column(
       children: [
@@ -459,10 +616,16 @@ class _WorkspaceBody extends StatelessWidget {
             children: [
               Expanded(
                 child: onOpenLayoutPicker == null
-                    ? Text(layoutName,
+                    ? Text(
+                        layoutName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: WeDropColors.ink))
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: WeDropColors.ink,
+                        ),
+                      )
                     : InkWell(
                         borderRadius: BorderRadius.circular(Radii.control),
                         onTap: onOpenLayoutPicker,
@@ -472,13 +635,22 @@ class _WorkspaceBody extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Flexible(
-                                child: Text(layoutName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                        fontSize: 15, fontWeight: FontWeight.w600, color: WeDropColors.ink)),
+                                child: Text(
+                                  layoutName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: WeDropColors.ink,
+                                  ),
+                                ),
                               ),
-                              const Icon(Icons.expand_more_rounded, size: 18, color: WeDropColors.inkDim),
+                              const Icon(
+                                Icons.expand_more_rounded,
+                                size: 18,
+                                color: WeDropColors.inkDim,
+                              ),
                             ],
                           ),
                         ),
@@ -489,7 +661,11 @@ class _WorkspaceBody extends StatelessWidget {
                   tooltip: 'Add widget',
                   onPressed: onOpenWidgetStore,
                   visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.add_box_rounded, size: 19, color: WeDropColors.inkDim),
+                  icon: const Icon(
+                    Icons.add_box_rounded,
+                    size: 19,
+                    color: WeDropColors.inkDim,
+                  ),
                 ),
               topAction,
             ],
@@ -497,11 +673,20 @@ class _WorkspaceBody extends StatelessWidget {
         ),
         Expanded(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(Space.md, Space.sm, Space.md, Space.sm),
+            padding: const EdgeInsets.fromLTRB(
+              Space.md,
+              Space.sm,
+              Space.md,
+              Space.sm,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ...rows,
+                if (others.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: Space.sm),
+                    child: grid,
+                  ),
                 if (buttonsInstance != null)
                   Expanded(
                     child: Column(
@@ -511,17 +696,25 @@ class _WorkspaceBody extends StatelessWidget {
                           children: [
                             Expanded(
                               child: CardLabel(
-                                buttons.isEmpty ? 'My buttons' : 'My buttons · ${buttons.length}',
+                                buttons.isEmpty
+                                    ? 'My buttons'
+                                    : 'My buttons · ${buttons.length}',
                               ),
                             ),
-                            ?_menuFor(context, buttonsInstance, canResize: false),
+                            ?_menuFor(
+                              context,
+                              buttonsInstance,
+                              canResize: false,
+                            ),
                           ],
                         ),
                         Expanded(
                           child: _WorkspaceGrid(
                             buttons: buttons,
                             onRun: _runButton,
-                            onConfigure: () => service.requestConfigureButtons(device.deviceId),
+                            onConfigure: () => service.requestConfigureButtons(
+                              device.deviceId,
+                            ),
                           ),
                         ),
                       ],
@@ -578,19 +771,36 @@ class _WidgetEditorSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(Space.lg, Space.lg, Space.lg, Space.lg + MediaQuery.of(context).viewInsets.bottom),
+        padding: EdgeInsets.fromLTRB(
+          Space.lg,
+          Space.lg,
+          Space.lg,
+          Space.lg + MediaQuery.of(context).viewInsets.bottom,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: WeDropColors.ink)),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: WeDropColors.ink,
+              ),
+            ),
             const SizedBox(height: Space.md),
             if (canResize)
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Full width', style: TextStyle(color: WeDropColors.ink)),
-                subtitle: const Text('Off pairs this widget with another compact one',
-                    style: TextStyle(color: WeDropColors.inkFaint, fontSize: 12)),
+                title: const Text(
+                  'Full width',
+                  style: TextStyle(color: WeDropColors.ink),
+                ),
+                subtitle: const Text(
+                  'Off pairs this widget with another compact one',
+                  style: TextStyle(color: WeDropColors.inkFaint, fontSize: 12),
+                ),
                 value: !isCompact,
                 onChanged: (_) {
                   Navigator.pop(context);
@@ -599,8 +809,14 @@ class _WidgetEditorSheet extends StatelessWidget {
               ),
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.arrow_upward_rounded, color: WeDropColors.inkDim),
-              title: const Text('Move up', style: TextStyle(color: WeDropColors.ink)),
+              leading: const Icon(
+                Icons.arrow_upward_rounded,
+                color: WeDropColors.inkDim,
+              ),
+              title: const Text(
+                'Move up',
+                style: TextStyle(color: WeDropColors.ink),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 onMoveUp();
@@ -608,8 +824,14 @@ class _WidgetEditorSheet extends StatelessWidget {
             ),
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.arrow_downward_rounded, color: WeDropColors.inkDim),
-              title: const Text('Move down', style: TextStyle(color: WeDropColors.ink)),
+              leading: const Icon(
+                Icons.arrow_downward_rounded,
+                color: WeDropColors.inkDim,
+              ),
+              title: const Text(
+                'Move down',
+                style: TextStyle(color: WeDropColors.ink),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 onMoveDown();
@@ -620,17 +842,20 @@ class _WidgetEditorSheet extends StatelessWidget {
               const CardLabel('Buttons on this widget'),
               if (buttonsPreview!.isEmpty)
                 onConfigureButtons != null
-                    ? _ConfigurePrompt(
+                    ? InlinePrompt(
                         message: 'No buttons configured yet',
                         onTap: () {
                           Navigator.pop(context);
                           onConfigureButtons!();
                         },
-                        label: 'Add on desktop',
+                        actionLabel: 'Add on desktop',
                       )
                     : const Text(
                         'No buttons configured yet. Add them from the desktop\'s My Buttons editor.',
-                        style: TextStyle(color: WeDropColors.inkFaint, fontSize: 12.5),
+                        style: TextStyle(
+                          color: WeDropColors.inkFaint,
+                          fontSize: 12.5,
+                        ),
                       )
               else
                 Wrap(
@@ -642,9 +867,14 @@ class _WidgetEditorSheet extends StatelessWidget {
                         avatar: Icon(
                           kWorkspaceIcons[b.icon] ?? Icons.bolt_rounded,
                           size: 16,
-                          color: b.colorValue != 0 ? Color(b.colorValue) : WeDropColors.brandSoft,
+                          color: b.colorValue != 0
+                              ? Color(b.colorValue)
+                              : WeDropColors.brandSoft,
                         ),
-                        label: Text(b.label, style: const TextStyle(fontSize: 12)),
+                        label: Text(
+                          b.label,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                         backgroundColor: WeDropColors.surfaceHi,
                         side: BorderSide.none,
                       ),
@@ -653,7 +883,11 @@ class _WidgetEditorSheet extends StatelessWidget {
               const SizedBox(height: Space.xs),
               const Text(
                 'Edit these on the desktop\'s My Buttons window.',
-                style: TextStyle(color: WeDropColors.inkFaint, fontSize: 11.5, fontStyle: FontStyle.italic),
+                style: TextStyle(
+                  color: WeDropColors.inkFaint,
+                  fontSize: 11.5,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
             ],
             const SizedBox(height: Space.lg),
@@ -664,7 +898,9 @@ class _WidgetEditorSheet extends StatelessWidget {
                   Navigator.pop(context);
                   onRemove();
                 },
-                style: OutlinedButton.styleFrom(foregroundColor: WeDropColors.danger),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: WeDropColors.danger,
+                ),
                 child: const Text('Remove widget'),
               ),
             ),
@@ -705,10 +941,20 @@ class _LayoutPickerSheetState extends State<_LayoutPickerSheet> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Rename layout'),
-        content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: 'Name')),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Name'),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Save'),
+          ),
         ],
       ),
     );
@@ -721,45 +967,85 @@ class _LayoutPickerSheetState extends State<_LayoutPickerSheet> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Padding(
-              padding: EdgeInsets.fromLTRB(Space.lg, Space.lg, Space.lg, Space.sm),
-              child: Text('Layouts', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: WeDropColors.ink)),
+              padding: EdgeInsets.fromLTRB(
+                Space.lg,
+                Space.lg,
+                Space.lg,
+                Space.sm,
+              ),
+              child: Text(
+                'Layouts',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: WeDropColors.ink,
+                ),
+              ),
             ),
             for (final layout in widget.layouts)
               ListTile(
                 leading: Icon(
-                  layout.id == widget.activeId ? Icons.check_circle_rounded : Icons.circle_outlined,
-                  color: layout.id == widget.activeId ? WeDropColors.brand : WeDropColors.inkFaint,
+                  layout.id == widget.activeId
+                      ? Icons.check_circle_rounded
+                      : Icons.circle_outlined,
+                  color: layout.id == widget.activeId
+                      ? WeDropColors.brand
+                      : WeDropColors.inkFaint,
                 ),
-                title: Text(layout.name, style: const TextStyle(color: WeDropColors.ink)),
-                subtitle: Text('${layout.widgets.length} widget${layout.widgets.length == 1 ? '' : 's'}',
-                    style: const TextStyle(color: WeDropColors.inkFaint, fontSize: 12)),
+                title: Text(
+                  layout.name,
+                  style: const TextStyle(color: WeDropColors.ink),
+                ),
+                subtitle: Text(
+                  '${layout.widgets.length} widget${layout.widgets.length == 1 ? '' : 's'}',
+                  style: const TextStyle(
+                    color: WeDropColors.inkFaint,
+                    fontSize: 12,
+                  ),
+                ),
                 onTap: () => widget.onSelect(layout.id),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
                       tooltip: 'Rename',
-                      icon: const Icon(Icons.edit_rounded, size: 18, color: WeDropColors.inkFaint),
+                      icon: const Icon(
+                        Icons.edit_rounded,
+                        size: 18,
+                        color: WeDropColors.inkFaint,
+                      ),
                       onPressed: () => _rename(layout),
                     ),
                     if (widget.layouts.length > 1)
                       IconButton(
                         tooltip: 'Delete',
-                        icon: const Icon(Icons.delete_outline_rounded, size: 18, color: WeDropColors.danger),
+                        icon: const Icon(
+                          Icons.delete_outline_rounded,
+                          size: 18,
+                          color: WeDropColors.danger,
+                        ),
                         onPressed: () => widget.onDelete(layout.id),
                       ),
                   ],
                 ),
               ),
             ListTile(
-              leading: const Icon(Icons.add_rounded, color: WeDropColors.brandSoft),
-              title: const Text('New layout', style: TextStyle(color: WeDropColors.ink)),
+              leading: const Icon(
+                Icons.add_rounded,
+                color: WeDropColors.brandSoft,
+              ),
+              title: const Text(
+                'New layout',
+                style: TextStyle(color: WeDropColors.ink),
+              ),
               onTap: widget.onCreate,
             ),
             const SizedBox(height: Space.md),
@@ -787,18 +1073,42 @@ class _LayoutSelectSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Padding(
-            padding: EdgeInsets.fromLTRB(Space.lg, Space.lg, Space.lg, Space.sm),
-            child: Text('Choose a layout', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: WeDropColors.ink)),
+            padding: EdgeInsets.fromLTRB(
+              Space.lg,
+              Space.lg,
+              Space.lg,
+              Space.sm,
+            ),
+            child: Text(
+              'Choose a layout',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: WeDropColors.ink,
+              ),
+            ),
           ),
           for (final layout in layouts)
             ListTile(
               leading: Icon(
-                layout.id == activeId ? Icons.check_circle_rounded : Icons.circle_outlined,
-                color: layout.id == activeId ? WeDropColors.brand : WeDropColors.inkFaint,
+                layout.id == activeId
+                    ? Icons.check_circle_rounded
+                    : Icons.circle_outlined,
+                color: layout.id == activeId
+                    ? WeDropColors.brand
+                    : WeDropColors.inkFaint,
               ),
-              title: Text(layout.name, style: const TextStyle(color: WeDropColors.ink)),
-              subtitle: Text('${layout.widgets.length} widget${layout.widgets.length == 1 ? '' : 's'}',
-                  style: const TextStyle(color: WeDropColors.inkFaint, fontSize: 12)),
+              title: Text(
+                layout.name,
+                style: const TextStyle(color: WeDropColors.ink),
+              ),
+              subtitle: Text(
+                '${layout.widgets.length} widget${layout.widgets.length == 1 ? '' : 's'}',
+                style: const TextStyle(
+                  color: WeDropColors.inkFaint,
+                  fontSize: 12,
+                ),
+              ),
               onTap: () => Navigator.pop(context, layout.id),
             ),
           const SizedBox(height: Space.md),
@@ -822,7 +1132,11 @@ class _WorkspaceGrid extends StatelessWidget {
   final void Function(WorkspaceButtonDef) onRun;
   final VoidCallback onConfigure;
 
-  const _WorkspaceGrid({required this.buttons, required this.onRun, required this.onConfigure});
+  const _WorkspaceGrid({
+    required this.buttons,
+    required this.onRun,
+    required this.onConfigure,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -836,13 +1150,17 @@ class _WorkspaceGrid extends StatelessWidget {
               const Text(
                 'No buttons configured yet.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12.5, color: WeDropColors.inkFaint, height: 1.4),
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: WeDropColors.inkFaint,
+                  height: 1.4,
+                ),
               ),
               const SizedBox(height: Space.sm),
-              _ConfigurePrompt(
+              InlinePrompt(
                 message: 'No buttons set up yet',
                 onTap: onConfigure,
-                label: 'Add on desktop',
+                actionLabel: 'Add on desktop',
               ),
             ],
           ),
@@ -850,9 +1168,14 @@ class _WorkspaceGrid extends StatelessWidget {
       );
     }
 
+    // The "add" tile always sits at the end of the grid, not just when it's
+    // empty — buttons are edited on the desktop, so this is always a live
+    // door to that editor, not a one-time onboarding prompt.
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = (constraints.maxWidth / _kTileTargetWidth).floor().clamp(4, 10);
+        final columns = (constraints.maxWidth / _kTileTargetWidth)
+            .floor()
+            .clamp(4, 10);
         return GridView.builder(
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
@@ -860,13 +1183,49 @@ class _WorkspaceGrid extends StatelessWidget {
             crossAxisSpacing: Space.xs,
             childAspectRatio: 0.92,
           ),
-          itemCount: buttons.length,
+          itemCount: buttons.length + 1,
           itemBuilder: (context, i) {
+            if (i == buttons.length) {
+              return _AddButtonTile(onTap: onConfigure);
+            }
             final button = buttons[i];
-            return _WorkspaceButtonTile(button: button, onTap: () => onRun(button));
+            return _WorkspaceButtonTile(
+              button: button,
+              onTap: () => onRun(button),
+            );
           },
         );
       },
+    );
+  }
+}
+
+class _AddButtonTile extends StatelessWidget {
+  final VoidCallback onTap;
+  const _AddButtonTile({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(Radii.control),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(Radii.control),
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(Radii.control),
+            border: Border.all(color: WeDropColors.border),
+          ),
+          child: const Center(
+            child: Icon(
+              Icons.add_rounded,
+              color: WeDropColors.inkFaint,
+              size: 20,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -902,7 +1261,10 @@ class _WorkspaceFullScreenState extends State<_WorkspaceFullScreen> {
   @override
   void initState() {
     super.initState();
-    _layout = widget.layouts.firstWhere((l) => l.id == widget.initialLayoutId, orElse: () => widget.layouts.first);
+    _layout = widget.layouts.firstWhere(
+      (l) => l.id == widget.initialLayoutId,
+      orElse: () => widget.layouts.first,
+    );
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     // Explicitly allow both orientations while this surface is up, regardless
     // of whatever the rest of the app currently prefers — this is meant to be
@@ -935,10 +1297,16 @@ class _WorkspaceFullScreenState extends State<_WorkspaceFullScreen> {
   Future<void> _pickLayout() async {
     final id = await showModalBottomSheet<String>(
       context: context,
-      builder: (_) => _LayoutSelectSheet(layouts: widget.layouts, activeId: _layout.id),
+      builder: (_) =>
+          _LayoutSelectSheet(layouts: widget.layouts, activeId: _layout.id),
     );
     if (id == null || !mounted) return;
-    setState(() => _layout = widget.layouts.firstWhere((l) => l.id == id, orElse: () => _layout));
+    setState(
+      () => _layout = widget.layouts.firstWhere(
+        (l) => l.id == id,
+        orElse: () => _layout,
+      ),
+    );
     await widget.onLayoutChanged(id);
   }
 
@@ -956,6 +1324,7 @@ class _WorkspaceFullScreenState extends State<_WorkspaceFullScreen> {
             onResizeWidget: (_) {},
             onRemoveWidget: (_) {},
             onMoveWidget: (_, _) {},
+            onReorderWidgets: (_, _) {},
             showWidgetMenus: false,
             layoutName: _layout.name,
             onOpenLayoutPicker: widget.layouts.length > 1 ? _pickLayout : null,
@@ -964,7 +1333,11 @@ class _WorkspaceFullScreenState extends State<_WorkspaceFullScreen> {
               tooltip: 'Exit full screen',
               onPressed: () => Navigator.of(context).pop(),
               visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.close_fullscreen_rounded, size: 19, color: WeDropColors.inkDim),
+              icon: const Icon(
+                Icons.close_fullscreen_rounded,
+                size: 19,
+                color: WeDropColors.inkDim,
+              ),
             ),
           ),
         ),
@@ -984,7 +1357,11 @@ class _DesktopSwitcherCard extends StatelessWidget {
   final DeviceView device;
   final Widget? menu;
 
-  const _DesktopSwitcherCard({required this.service, required this.device, required this.menu});
+  const _DesktopSwitcherCard({
+    required this.service,
+    required this.device,
+    required this.menu,
+  });
 
   void _switch(bool forward) {
     service.sendWorkspaceAction(
@@ -1002,15 +1379,22 @@ class _DesktopSwitcherCard extends StatelessWidget {
     return WdCard(
       child: Row(
         children: [
-          const Icon(Icons.desktop_windows_rounded, size: 18, color: WeDropColors.accent),
-          const SizedBox(width: 8),
-          const Expanded(
-            child: Text('Switch desktop',
-                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: WeDropColors.inkDim)),
+          Expanded(
+            child: CardTitle(
+              icon: Icons.desktop_windows_rounded,
+              text: 'Switch desktop',
+            ),
           ),
-          _SwitcherButton(icon: Icons.chevron_left_rounded, onTap: () => _switch(false)),
           const SizedBox(width: 8),
-          _SwitcherButton(icon: Icons.chevron_right_rounded, onTap: () => _switch(true)),
+          _SwitcherButton(
+            icon: Icons.chevron_left_rounded,
+            onTap: () => _switch(false),
+          ),
+          const SizedBox(width: 8),
+          _SwitcherButton(
+            icon: Icons.chevron_right_rounded,
+            onTap: () => _switch(true),
+          ),
           ?menu,
         ],
       ),
@@ -1031,7 +1415,11 @@ class _SwitcherButton extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(Radii.control),
         onTap: onTap,
-        child: SizedBox(width: 36, height: 32, child: Icon(icon, size: 20, color: WeDropColors.inkDim)),
+        child: SizedBox(
+          width: 36,
+          height: 32,
+          child: Icon(icon, size: 20, color: WeDropColors.inkDim),
+        ),
       ),
     );
   }
@@ -1047,7 +1435,12 @@ class _DynamicControlsCard extends StatelessWidget {
   final AdaptiveControlsState? state;
   final Widget? menu;
 
-  const _DynamicControlsCard({required this.service, required this.device, required this.state, required this.menu});
+  const _DynamicControlsCard({
+    required this.service,
+    required this.device,
+    required this.state,
+    required this.menu,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1057,7 +1450,8 @@ class _DynamicControlsCard extends StatelessWidget {
     // An app is focused but has no profile yet — offer to configure it,
     // rather than showing nothing or (as before) the same nine generic
     // buttons every unrecognized app used to get.
-    final needsConfigure = appName.isNotEmpty && controls.isEmpty && exe.isNotEmpty;
+    final needsConfigure =
+        appName.isNotEmpty && controls.isEmpty && exe.isNotEmpty;
 
     return WdCard(
       child: Column(
@@ -1065,14 +1459,12 @@ class _DynamicControlsCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.auto_awesome_rounded, size: 18, color: WeDropColors.accent),
-              const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  controls.isEmpty ? 'Dynamic controls' : 'Now on desktop: $appName',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: WeDropColors.inkDim),
+                child: CardTitle(
+                  icon: Icons.auto_awesome_rounded,
+                  text: controls.isEmpty
+                      ? 'Dynamic controls'
+                      : 'Now on desktop: $appName',
                 ),
               ),
               ?menu,
@@ -1080,19 +1472,26 @@ class _DynamicControlsCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           if (needsConfigure)
-            _ConfigurePrompt(
+            InlinePrompt(
               message: 'No buttons set up for $appName yet',
               onTap: () => service.requestConfigureApp(device.deviceId, exe),
             )
           else if (controls.isEmpty)
-            const Text('No recognized app is focused right now', style: TextStyle(fontSize: 12, color: WeDropColors.inkFaint))
+            const Text(
+              'No recognized app is focused right now',
+              style: TextStyle(fontSize: 12, color: WeDropColors.inkFaint),
+            )
           else
             LayoutBuilder(
               builder: (context, constraints) {
                 const target = 76.0;
                 const spacing = 10.0;
-                final columns = ((constraints.maxWidth + spacing) / (target + spacing)).floor().clamp(1, controls.length);
-                final tileWidth = (constraints.maxWidth - spacing * (columns - 1)) / columns;
+                final columns =
+                    ((constraints.maxWidth + spacing) / (target + spacing))
+                        .floor()
+                        .clamp(1, controls.length);
+                final tileWidth =
+                    (constraints.maxWidth - spacing * (columns - 1)) / columns;
                 return Wrap(
                   spacing: spacing,
                   runSpacing: spacing,
@@ -1102,7 +1501,10 @@ class _DynamicControlsCard extends StatelessWidget {
                         width: tileWidth,
                         child: _DynamicControlTile(
                           control: control,
-                          onTap: () => service.sendWorkspaceAction(device.deviceId, control.action),
+                          onTap: () => service.sendWorkspaceAction(
+                            device.deviceId,
+                            control.action,
+                          ),
                         ),
                       ),
                   ],
@@ -1110,42 +1512,6 @@ class _DynamicControlsCard extends StatelessWidget {
               },
             ),
         ],
-      ),
-    );
-  }
-}
-
-class _ConfigurePrompt extends StatelessWidget {
-  final String message;
-  final VoidCallback onTap;
-  final String label;
-  const _ConfigurePrompt({required this.message, required this.onTap, this.label = 'Configure'});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: WeDropColors.surfaceHi,
-      borderRadius: BorderRadius.circular(Radii.control),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(Radii.control),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              const Icon(Icons.add_circle_outline_rounded, size: 18, color: WeDropColors.brandSoft),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  message,
-                  style: const TextStyle(fontSize: 12.5, color: WeDropColors.inkDim),
-                ),
-              ),
-              Text(label,
-                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: WeDropColors.brandSoft)),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -1161,7 +1527,9 @@ class _DynamicControlTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = control.color != 0 ? Color(control.color) : WeDropColors.accent;
+    final color = control.color != 0
+        ? Color(control.color)
+        : WeDropColors.accent;
     final icon = kWorkspaceIcons[control.icon] ?? Icons.bolt_rounded;
 
     return Material(
@@ -1182,7 +1550,15 @@ class _DynamicControlTile extends StatelessWidget {
             children: [
               Icon(icon, size: 18, color: color),
               const SizedBox(height: Space.xs),
-              Text(control.label, style: AppText.caption.copyWith(color: WeDropColors.ink)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  control.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.caption.copyWith(color: WeDropColors.ink),
+                ),
+              ),
             ],
           ),
         ),
@@ -1201,7 +1577,12 @@ class _MinimizedAppsCard extends StatelessWidget {
   final MinimizedAppsState? state;
   final Widget? menu;
 
-  const _MinimizedAppsCard({required this.service, required this.device, required this.state, required this.menu});
+  const _MinimizedAppsCard({
+    required this.service,
+    required this.device,
+    required this.state,
+    required this.menu,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1213,18 +1594,21 @@ class _MinimizedAppsCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.web_asset_off_rounded, size: 18, color: WeDropColors.accent),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text('Minimized apps',
-                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: WeDropColors.inkDim)),
+              Expanded(
+                child: CardTitle(
+                  icon: Icons.web_asset_off_rounded,
+                  text: 'Minimized apps',
+                ),
               ),
               ?menu,
             ],
           ),
           const SizedBox(height: 10),
           if (windows.isEmpty)
-            const Text('Nothing minimized right now', style: TextStyle(fontSize: 12, color: WeDropColors.inkFaint))
+            const Text(
+              'Nothing minimized right now',
+              style: TextStyle(fontSize: 12, color: WeDropColors.inkFaint),
+            )
           else
             SizedBox(
               height: 64,
@@ -1234,7 +1618,10 @@ class _MinimizedAppsCard extends StatelessWidget {
                 separatorBuilder: (_, _) => const SizedBox(width: 8),
                 itemBuilder: (context, i) {
                   final w = windows[i];
-                  return _MinimizedChip(window: w, onTap: () => service.restoreWindow(device.deviceId, w.id));
+                  return _MinimizedChip(
+                    window: w,
+                    onTap: () => service.restoreWindow(device.deviceId, w.id),
+                  );
                 },
               ),
             ),
@@ -1263,19 +1650,121 @@ class _MinimizedChip extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.crop_din_rounded, size: 18, color: WeDropColors.inkDim),
+              const Icon(
+                Icons.crop_din_rounded,
+                size: 18,
+                color: WeDropColors.inkDim,
+              ),
               const SizedBox(height: 4),
               Text(
                 window.title,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: WeDropColors.ink),
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: WeDropColors.ink,
+                ),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A compact now-playing + transport controls widget — deliberately smaller
+/// than the Overview tab's own media card (no seek bar, no volume row, no
+/// artwork beyond a small thumbnail): this is meant to sit half-width next
+/// to another compact widget. Tapping it opens the full media controller
+/// screen for anything more than play/pause/skip.
+class _MediaControllerCard extends StatelessWidget {
+  final AppService service;
+  final DeviceView device;
+  final MediaState? media;
+  final Widget? menu;
+
+  const _MediaControllerCard({
+    required this.service,
+    required this.device,
+    required this.media,
+    required this.menu,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final m = media;
+    final hasMedia = m != null && m.hasMedia;
+
+    return WdCard(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => MediaControllerScreen(
+            service: service,
+            deviceId: device.deviceId,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: CardTitle(
+                  icon: Icons.music_note_rounded,
+                  text: hasMedia
+                      ? (m.title.isEmpty ? 'Now playing' : m.title)
+                      : 'Nothing playing',
+                  iconSize: 16,
+                  fontSize: 12,
+                ),
+              ),
+              ?menu,
+            ],
+          ),
+          if (hasMedia && m.artist.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                m.artist,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 10.5,
+                  color: WeDropColors.inkFaint,
+                ),
+              ),
+            ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _transportBtn(Icons.skip_previous_rounded, MediaCommand.prev),
+              _transportBtn(
+                m?.playing == true
+                    ? Icons.pause_rounded
+                    : Icons.play_arrow_rounded,
+                MediaCommand.playPause,
+                large: true,
+              ),
+              _transportBtn(Icons.skip_next_rounded, MediaCommand.next),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _transportBtn(IconData icon, String command, {bool large = false}) {
+    return IconButton(
+      onPressed: () => service.sendMediaCommand(device.deviceId, command),
+      icon: Icon(icon),
+      iconSize: large ? 24 : 19,
+      visualDensity: VisualDensity.compact,
+      color: large ? WeDropColors.brandSoft : WeDropColors.inkDim,
     );
   }
 }
@@ -1288,7 +1777,9 @@ class _WorkspaceButtonTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = button.colorValue != 0 ? Color(button.colorValue) : WeDropColors.accent;
+    final color = button.colorValue != 0
+        ? Color(button.colorValue)
+        : WeDropColors.accent;
     final icon = kWorkspaceIcons[button.icon] ?? Icons.bolt_rounded;
 
     return Material(
