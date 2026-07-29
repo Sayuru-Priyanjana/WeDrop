@@ -14,7 +14,7 @@ export function Card({
   return (
     <div
       onClick={onClick}
-      className={`rounded-[18px] border border-white/[0.07] bg-white/[0.028] backdrop-blur-sm ${className}`}
+      className={`rounded-[20px] border border-white/[0.07] bg-white/[0.028] backdrop-blur-sm ${className}`}
     >
       {children}
     </div>
@@ -45,7 +45,7 @@ type ButtonVariant = "primary" | "ghost" | "danger" | "subtle";
 
 const buttonStyles: Record<ButtonVariant, string> = {
   primary:
-    "bg-brand text-white hover:bg-brand-soft shadow-lg shadow-brand/25 disabled:shadow-none",
+    "bg-ink text-surface hover:bg-ink-dim shadow-lg shadow-ink/10 disabled:shadow-none",
   ghost:
     "bg-transparent text-ink-dim hover:bg-surface-hi hover:text-ink border border-border",
   subtle: "bg-surface-hi text-ink hover:bg-border",
@@ -124,7 +124,7 @@ export function Toggle({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-250 disabled:cursor-not-allowed disabled:opacity-40 ${
-        checked ? "bg-brand" : "bg-border"
+        checked ? "bg-ink" : "bg-border"
       }`}
     >
       <span
@@ -232,6 +232,84 @@ export function ProgressBar({ value, indeterminate }: { value: number; indetermi
           className="h-full rounded-full bg-gradient-to-r from-brand to-accent transition-[width] duration-300 ease-out"
           style={{ width: `${Math.min(100, Math.max(0, value * 100))}%` }}
         />
+      )}
+    </div>
+  );
+}
+
+export const ICON_KEYS = [
+  "bolt", "terminal", "code", "folder", "globe", "apps", "keyboard", "save",
+  "search", "refresh", "star", "settings", "music", "camera", "mail", "chat",
+  "lock", "power", "link", "file", "download", "upload", "play", "brush",
+  "build", "database", "cloud", "home", "calendar", "note", "calculate",
+  "timer", "rocket", "shield", "bug", "monitor", "grid", "undo", "redo",
+  "git", "run", "debug", "back", "forward", "copy", "paste", "cut",
+  "selectall", "close",
+];
+
+const MATERIAL_MAP: Record<string, string> = {
+  bolt: "bolt", terminal: "terminal", code: "code", folder: "folder", globe: "language",
+  apps: "apps", keyboard: "keyboard", save: "save", search: "search", refresh: "refresh",
+  star: "star", settings: "settings", music: "music_note", camera: "photo_camera", mail: "mail",
+  chat: "chat", lock: "lock", power: "power", link: "link", file: "insert_drive_file",
+  download: "download", upload: "upload", play: "play_arrow", brush: "brush", build: "build",
+  database: "database", cloud: "cloud", home: "home", calendar: "calendar_today", note: "note",
+  calculate: "calculate", timer: "timer", rocket: "rocket_launch", shield: "shield",
+  bug: "bug_report", monitor: "monitor", grid: "grid_view", undo: "undo", redo: "redo",
+  git: "device_hub", run: "play_circle", debug: "bug_report", back: "arrow_back",
+  forward: "arrow_forward", copy: "content_copy", paste: "content_paste", cut: "content_cut",
+  selectall: "select_all", close: "close"
+};
+
+import { useState, useEffect, useRef } from "react";
+
+export function IconPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  const getIcon = (key: string) => MATERIAL_MAP[key] || "help_outline";
+  
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex h-[30px] w-12 items-center justify-center rounded-xl border border-border bg-bg-soft text-ink outline-none transition-colors hover:border-border-hi focus:border-ink/20"
+      >
+        <span className="material-symbols-outlined text-[18px] leading-none">{getIcon(value)}</span>
+      </button>
+      {open && (
+        <div className="absolute top-full z-10 mt-1 w-[14rem] rounded-xl border border-border bg-surface-hi p-2 shadow-xl">
+          <div className="grid max-h-[12rem] grid-cols-6 gap-1 overflow-y-auto pr-1">
+            {ICON_KEYS.map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  onChange(key);
+                  setOpen(false);
+                }}
+                className={`flex items-center justify-center rounded-lg p-1.5 transition-colors ${
+                  value === key ? "bg-ink text-surface" : "text-ink hover:bg-surface"
+                }`}
+                title={key}
+              >
+                <span className="material-symbols-outlined text-[18px] leading-none">{getIcon(key)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

@@ -50,14 +50,14 @@ export function PairedDeviceCard({
         : "Offline";
 
   return (
-    <div className="wd-fade-up overflow-hidden rounded-[18px] border border-border bg-surface/70 transition-colors duration-300 hover:border-border-hi">
+    <div className="wd-fade-up overflow-hidden rounded-[20px] border border-border bg-surface/70 transition-colors duration-300 hover:border-border-hi">
       <div className="flex items-start gap-4 p-5">
         <div
-          className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border ${
+          className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${
             device.connected
-              ? "border-success/30 bg-success/10 text-success"
+              ? "border-ink/20 bg-ink text-surface"
               : "border-border bg-surface-hi text-ink-dim"
-          } ${device.connected ? "wd-ring" : ""}`}
+          }`}
         >
           <Glyph className="h-6 w-6" />
         </div>
@@ -95,38 +95,7 @@ export function PairedDeviceCard({
         <HealthStrip health={device.health} showAdvanced={showAdvanced} />
       )}
 
-      {/* Now-playing, when the peer reports it. */}
-      {device.connected && device.media?.has_media && (
-        <NowPlaying
-          media={device.media}
-          onSeek={(positionMs) => onSeek(device.device_id, positionMs)}
-        />
-      )}
 
-      {/* Media remote, only useful while a session is actually live. */}
-      {device.connected && device.allow_media && (
-        <div className="flex items-center gap-1.5 border-t border-border/60 px-5 py-3">
-          <span className="mr-1 text-[11.5px] font-medium uppercase tracking-wider text-ink-faint">
-            Media
-          </span>
-          <IconButton title="Previous track" onClick={() => onMedia(device.device_id, "prev")}>
-            <IconPrev className="h-4 w-4" />
-          </IconButton>
-          <IconButton title="Play or pause" onClick={() => onMedia(device.device_id, "play_pause")}>
-            <IconPlay className="h-4 w-4" />
-          </IconButton>
-          <IconButton title="Next track" onClick={() => onMedia(device.device_id, "next")}>
-            <IconNext className="h-4 w-4" />
-          </IconButton>
-          <div className="mx-1 h-5 w-px bg-border" />
-          <IconButton title="Volume down" onClick={() => onMedia(device.device_id, "vol_down")}>
-            <IconVolumeDown className="h-4 w-4" />
-          </IconButton>
-          <IconButton title="Volume up" onClick={() => onMedia(device.device_id, "vol_up")}>
-            <IconVolumeUp className="h-4 w-4" />
-          </IconButton>
-        </div>
-      )}
 
       <button
         onClick={() => setExpanded(!expanded)}
@@ -198,7 +167,6 @@ function PermissionRow({
   );
 }
 
-/** A compact row of the peer's battery (and, once opted in, network/CPU/memory) readings. */
 function HealthStrip({
   health,
   showAdvanced,
@@ -206,35 +174,27 @@ function HealthStrip({
   health: protocol.DeviceHealth;
   showAdvanced: boolean;
 }) {
-  const items: { icon: React.ReactNode; label: string }[] = [];
+  const items: string[] = [];
 
   if (health.battery >= 0) {
-    items.push({
-      icon: health.charging ? "⚡" : "🔋",
-      label: `${health.battery}%`,
-    });
+    items.push(`${health.battery}%`);
   }
-  // Network/CPU/memory are detail most people never look at day to day —
-  // kept out of the default view, shown only behind Settings > Advanced.
+  
   if (showAdvanced) {
     if (health.network_type && health.network_type !== "offline") {
-      items.push({
-        icon: health.network_type === "wifi" ? "📶" : "🔌",
-        label: health.network_type === "wifi" ? "Wi-Fi" : "Wired",
-      });
+      items.push(health.network_type === "wifi" ? "Wi-Fi" : "Wired");
     }
-    if (health.cpu_percent >= 0) items.push({ icon: "🧠", label: `CPU ${health.cpu_percent}%` });
-    if (health.mem_percent >= 0) items.push({ icon: "💾", label: `Mem ${health.mem_percent}%` });
+    if (health.cpu_percent >= 0) items.push(`CPU ${health.cpu_percent}%`);
+    if (health.mem_percent >= 0) items.push(`Mem ${health.mem_percent}%`);
   }
 
   if (items.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-3 border-t border-border/60 px-5 py-2.5 text-[12px] text-ink-faint">
+    <div className="flex flex-wrap items-center gap-3 border-t border-border/60 px-5 py-2 text-[11.5px] text-ink-faint">
       {items.map((item, i) => (
-        <span key={i} className="flex items-center gap-1.5">
-          <span className="text-[13px] leading-none">{item.icon}</span>
-          {item.label}
+        <span key={i} className="flex items-center">
+          {item}
         </span>
       ))}
     </div>
@@ -298,7 +258,7 @@ function NowPlaying({
             className="h-10 w-10 shrink-0 rounded-lg object-cover"
           />
         ) : (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-hi text-accent">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface-hi text-ink">
             ♪
           </div>
         )}
@@ -316,7 +276,7 @@ function NowPlaying({
       >
         <div className="h-1 w-full overflow-hidden rounded-full bg-border">
           <div
-            className={`h-full rounded-full bg-gradient-to-r from-accent to-brand ${
+            className={`h-full rounded-full bg-ink ${
               dragRatio === null ? "transition-[width] duration-500" : ""
             }`}
             style={{ width: `${ratio * 100}%` }}
