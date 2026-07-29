@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'core/app_service.dart';
 import 'core/platform/native_bridge.dart';
@@ -18,7 +19,8 @@ void main() {
   // Wire the two indirection hooks the UI uses to reach the platform bridge,
   // so the screen widgets never import it directly.
   NotificationAccessRequest.open = NativeBridge.requestNotificationAccess;
-  BatteryOptimisationRequest.open = NativeBridge.requestIgnoreBatteryOptimisations;
+  BatteryOptimisationRequest.open =
+      NativeBridge.requestIgnoreBatteryOptimisations;
 
   runApp(const WeDropApp());
 }
@@ -146,7 +148,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       ),
     );
     // If the request timed out while the dialog was open, close it.
-    if (mounted && _service.pairingPrompt == null && Navigator.canPop(context)) {
+    if (mounted &&
+        _service.pairingPrompt == null &&
+        Navigator.canPop(context)) {
       Navigator.pop(context);
     }
   }
@@ -176,12 +180,18 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                     prompt.offer.filename,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w500, color: WeDropColors.ink),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w500,
+                      color: WeDropColors.ink,
+                    ),
                   ),
                   const SizedBox(height: 3),
                   Text(
                     formatBytes(prompt.offer.size),
-                    style: const TextStyle(fontSize: 12, color: WeDropColors.inkFaint),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: WeDropColors.inkFaint,
+                    ),
                   ),
                 ],
               ),
@@ -273,18 +283,23 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                 ),
               ),
             ),
-            ...candidates.map((device) => ListTile(
-                  leading: Icon(
-                    iconForFormFactor(device.formFactor),
-                    color: WeDropColors.brandSoft,
-                  ),
-                  title: Text(device.name, style: const TextStyle(color: WeDropColors.ink)),
-                  subtitle: Text(
-                    device.connected ? 'Connected' : 'On the network',
-                    style: const TextStyle(color: WeDropColors.inkFaint),
-                  ),
-                  onTap: () => Navigator.pop(context, device),
-                )),
+            ...candidates.map(
+              (device) => ListTile(
+                leading: Icon(
+                  iconForFormFactor(device.formFactor),
+                  color: WeDropColors.brandSoft,
+                ),
+                title: Text(
+                  device.name,
+                  style: const TextStyle(color: WeDropColors.ink),
+                ),
+                subtitle: Text(
+                  device.connected ? 'Connected' : 'On the network',
+                  style: const TextStyle(color: WeDropColors.inkFaint),
+                ),
+                onTap: () => Navigator.pop(context, device),
+              ),
+            ),
             const SizedBox(height: 12),
           ],
         ),
@@ -326,24 +341,30 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
     final body = switch (_tab) {
       0 => DevicesScreen(
-          service: _service,
-          onSendFiles: _sendFilesTo,
-          onPair: _startPairing,
-          onOpenDevice: _openDevice,
-          pairingWith: _pairingWith,
-        ),
+        service: _service,
+        onSendFiles: _sendFilesTo,
+        onPair: _startPairing,
+        onOpenDevice: _openDevice,
+        pairingWith: _pairingWith,
+      ),
       1 => TransfersScreen(service: _service),
       2 => ClipboardScreen(service: _service),
       3 => NotificationsScreen(service: _service),
       _ => SettingsScreen(service: _service),
     };
 
-    return Scaffold(
-      appBar: AppBar(
-        titleSpacing: 20,
-        title: Row(
-          children: [
-            Container(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarIconBrightness: Brightness.light,
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: WeDropColors.bgSoft,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+      child: Scaffold(
+        appBar: AppBar(
+          titleSpacing: 20,
+          title: WdAppBarTitle(
+            glyph: Container(
               width: 34,
               height: 34,
               decoration: BoxDecoration(
@@ -354,87 +375,68 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                 ),
                 borderRadius: BorderRadius.circular(11),
               ),
-              child: const Icon(Icons.hub_rounded, size: 18, color: Colors.white),
+              child: const Icon(
+                Icons.hub_rounded,
+                size: 18,
+                color: Colors.white,
+              ),
             ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('WeDrop', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-                Text(
-                  connected == 0 ? 'No devices connected' : '$connected connected',
-                  style: const TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w400,
-                    color: WeDropColors.inkFaint,
-                  ),
-                ),
-              ],
+            title: 'WeDrop',
+            subtitle: connected == 0
+                ? 'No devices connected'
+                : '$connected connected',
+          ),
+        ),
+        body: Stack(
+          children: [
+            const WdBackdropGlow(),
+            SafeArea(child: body),
+            ?outgoing,
+            if (_service.importingSharedFiles)
+              const Positioned(
+                top: 8,
+                left: 0,
+                right: 0,
+                child: Center(child: _ImportingBanner()),
+              ),
+          ],
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _tab,
+          onDestinationSelected: (index) => setState(() => _tab = index),
+          destinations: [
+            const NavigationDestination(
+              icon: Icon(Icons.devices_outlined),
+              selectedIcon: Icon(Icons.devices_rounded),
+              label: 'Devices',
+            ),
+            const NavigationDestination(
+              icon: Icon(Icons.swap_horiz_outlined),
+              selectedIcon: Icon(Icons.swap_horiz_rounded),
+              label: 'Transfers',
+            ),
+            const NavigationDestination(
+              icon: Icon(Icons.content_paste_outlined),
+              selectedIcon: Icon(Icons.content_paste_rounded),
+              label: 'Clipboard',
+            ),
+            NavigationDestination(
+              icon: unread > 0
+                  ? Badge(
+                      label: Text('$unread'),
+                      child: const Icon(Icons.notifications_outlined),
+                    )
+                  : const Icon(Icons.notifications_outlined),
+              selectedIcon: const Icon(Icons.notifications_rounded),
+              label: 'Alerts',
+            ),
+            const NavigationDestination(
+              icon: Icon(Icons.settings_outlined),
+              selectedIcon: Icon(Icons.settings_rounded),
+              label: 'Settings',
             ),
           ],
         ),
-      ),
-      body: Stack(
-        children: [
-          // A soft glow, matching the desktop backdrop.
-          Positioned(
-            top: -120,
-            right: -80,
-            child: Container(
-              width: 320,
-              height: 320,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [WeDropColors.brand.withValues(alpha: 0.14), Colors.transparent],
-                ),
-              ),
-            ),
-          ),
-          SafeArea(child: body),
-          ?outgoing,
-          if (_service.importingSharedFiles)
-            const Positioned(
-              top: 8,
-              left: 0,
-              right: 0,
-              child: Center(child: _ImportingBanner()),
-            ),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: (index) => setState(() => _tab = index),
-        destinations: [
-          const NavigationDestination(
-            icon: Icon(Icons.devices_outlined),
-            selectedIcon: Icon(Icons.devices_rounded),
-            label: 'Devices',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.swap_horiz_outlined),
-            selectedIcon: Icon(Icons.swap_horiz_rounded),
-            label: 'Transfers',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.content_paste_outlined),
-            selectedIcon: Icon(Icons.content_paste_rounded),
-            label: 'Clipboard',
-          ),
-          NavigationDestination(
-            icon: unread > 0
-                ? Badge(label: Text('$unread'), child: const Icon(Icons.notifications_outlined))
-                : const Icon(Icons.notifications_outlined),
-            selectedIcon: const Icon(Icons.notifications_rounded),
-            label: 'Alerts',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings_rounded),
-            label: 'Settings',
-          ),
-        ],
       ),
     );
   }
@@ -498,7 +500,11 @@ class _OutgoingPairingOverlay extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.shield_outlined, size: 44, color: WeDropColors.brand),
+              const Icon(
+                Icons.shield_outlined,
+                size: 44,
+                color: WeDropColors.brand,
+              ),
               const SizedBox(height: 16),
               Text(
                 'Waiting for $name',
@@ -546,15 +552,15 @@ class _PairingHandshakeOverlay extends StatelessWidget {
           child: const Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              SizedBox(
-                width: 32,
-                height: 32,
-                child: CircularProgressIndicator(strokeWidth: 2.5, color: WeDropColors.brand),
-              ),
+              WdLoadingIndicator(size: 32),
               SizedBox(height: 16),
               Text(
                 'Connecting…',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: WeDropColors.ink),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: WeDropColors.ink,
+                ),
               ),
             ],
           ),
@@ -581,13 +587,12 @@ class _ImportingBanner extends StatelessWidget {
       child: const Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(strokeWidth: 2, color: WeDropColors.brand),
-          ),
+          WdLoadingIndicator(size: 16, strokeWidth: 2),
           SizedBox(width: 10),
-          Text('Importing shared file…', style: TextStyle(fontSize: 13, color: WeDropColors.ink)),
+          Text(
+            'Importing shared file…',
+            style: TextStyle(fontSize: 13, color: WeDropColors.ink),
+          ),
         ],
       ),
     );
@@ -604,13 +609,12 @@ class _Splash extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
-              width: 34,
-              height: 34,
-              child: CircularProgressIndicator(strokeWidth: 2.5, color: WeDropColors.brand),
-            ),
+            WdLoadingIndicator(size: 34),
             SizedBox(height: 16),
-            Text('Starting WeDrop…', style: TextStyle(color: WeDropColors.inkFaint)),
+            Text(
+              'Starting WeDrop…',
+              style: TextStyle(color: WeDropColors.inkFaint),
+            ),
           ],
         ),
       ),
@@ -632,7 +636,11 @@ class _StartupError extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline_rounded, size: 44, color: WeDropColors.danger),
+              const Icon(
+                Icons.error_outline_rounded,
+                size: 44,
+                color: WeDropColors.danger,
+              ),
               const SizedBox(height: 16),
               const Text(
                 'WeDrop could not start',

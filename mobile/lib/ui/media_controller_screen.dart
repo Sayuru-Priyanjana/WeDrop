@@ -18,7 +18,11 @@ class MediaControllerScreen extends StatefulWidget {
   final AppService service;
   final String deviceId;
 
-  const MediaControllerScreen({super.key, required this.service, required this.deviceId});
+  const MediaControllerScreen({
+    super.key,
+    required this.service,
+    required this.deviceId,
+  });
 
   @override
   State<MediaControllerScreen> createState() => _MediaControllerScreenState();
@@ -54,38 +58,67 @@ class _MediaControllerScreenState extends State<MediaControllerScreen> {
     final media = widget.service.interpolatedMediaOf(widget.deviceId);
 
     return Scaffold(
-      appBar: AppBar(title: Text(device != null ? '${device.name} · Media' : 'Media')),
-      body: device == null || !device.connected
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: EmptyState(
-                  icon: Icons.cloud_off_rounded,
-                  title: device == null ? 'This device is no longer paired' : '${device.name} is offline',
-                  hint: 'Media controls need an active connection.',
+      appBar: AppBar(
+        title: Text(device != null ? '${device.name} · Media' : 'Media'),
+      ),
+      body: Stack(
+        children: [
+          const WdBackdropGlow(),
+          device == null || !device.connected
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(Space.xl),
+                    child: EmptyState(
+                      icon: Icons.cloud_off_rounded,
+                      title: device == null
+                          ? 'This device is no longer paired'
+                          : '${device.name} is offline',
+                      hint: 'Media controls need an active connection.',
+                    ),
+                  ),
+                )
+              : ListView(
+                  padding: const EdgeInsets.all(Space.lg),
+                  children: [
+                    if (media != null && media.players.length > 1) ...[
+                      _PlayerList(
+                        service: widget.service,
+                        device: device,
+                        media: media,
+                      ),
+                      const SizedBox(height: Space.lg),
+                    ],
+                    _NowPlayingCard(
+                      service: widget.service,
+                      device: device,
+                      media: media,
+                    ),
+                    const SizedBox(height: Space.lg),
+                    _SystemVolumeCard(
+                      service: widget.service,
+                      device: device,
+                      volume: media?.volume ?? -1,
+                    ),
+                    if (media != null && media.appVolumes.isNotEmpty) ...[
+                      const SizedBox(height: Space.lg),
+                      _AppMixerCard(
+                        service: widget.service,
+                        device: device,
+                        apps: media.appVolumes,
+                      ),
+                    ],
+                    if (media != null && media.audioDevices.isNotEmpty) ...[
+                      const SizedBox(height: Space.lg),
+                      _OutputDeviceCard(
+                        service: widget.service,
+                        device: device,
+                        devices: media.audioDevices,
+                      ),
+                    ],
+                  ],
                 ),
-              ),
-            )
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (media != null && media.players.length > 1) ...[
-                  _PlayerList(service: widget.service, device: device, media: media),
-                  const SizedBox(height: 16),
-                ],
-                _NowPlayingCard(service: widget.service, device: device, media: media),
-                const SizedBox(height: 16),
-                _SystemVolumeCard(service: widget.service, device: device, volume: media?.volume ?? -1),
-                if (media != null && media.appVolumes.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  _AppMixerCard(service: widget.service, device: device, apps: media.appVolumes),
-                ],
-                if (media != null && media.audioDevices.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  _OutputDeviceCard(service: widget.service, device: device, devices: media.audioDevices),
-                ],
-              ],
-            ),
+        ],
+      ),
     );
   }
 }
@@ -99,7 +132,11 @@ class _PlayerList extends StatelessWidget {
   final DeviceView device;
   final MediaState media;
 
-  const _PlayerList({required this.service, required this.device, required this.media});
+  const _PlayerList({
+    required this.service,
+    required this.device,
+    required this.media,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -107,20 +144,31 @@ class _PlayerList extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SectionHeader(title: 'Players', hint: 'Choose which one to control'),
+          const SectionHeader(
+            title: 'Players',
+            hint: 'Choose which one to control',
+          ),
           ...media.players.map((p) {
             final selected = p.id == media.selectedPlayer;
             return InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () => service.sendMediaCommand(device.deviceId, MediaCommand.selectPlayer, playerId: p.id),
+              borderRadius: BorderRadius.circular(Radii.control),
+              onTap: () => service.sendMediaCommand(
+                device.deviceId,
+                MediaCommand.selectPlayer,
+                playerId: p.id,
+              ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Row(
                   children: [
                     Icon(
-                      selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                      selected
+                          ? Icons.radio_button_checked_rounded
+                          : Icons.radio_button_off_rounded,
                       size: 20,
-                      color: selected ? WeDropColors.brand : WeDropColors.inkFaint,
+                      color: selected
+                          ? WeDropColors.brand
+                          : WeDropColors.inkFaint,
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -131,19 +179,27 @@ class _PlayerList extends StatelessWidget {
                             p.title.isEmpty ? p.id : p.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 13.5, fontWeight: FontWeight.w600, color: WeDropColors.ink),
+                            style: AppText.label.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: WeDropColors.ink,
+                            ),
                           ),
                           if (p.artist.isNotEmpty)
-                            Text(p.artist,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 12, color: WeDropColors.inkFaint)),
+                            Text(
+                              p.artist,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppText.caption,
+                            ),
                         ],
                       ),
                     ),
                     if (p.playing)
-                      const Icon(Icons.equalizer_rounded, size: 16, color: WeDropColors.accent),
+                      const Icon(
+                        Icons.equalizer_rounded,
+                        size: 16,
+                        color: WeDropColors.accent,
+                      ),
                   ],
                 ),
               ),
@@ -160,7 +216,11 @@ class _NowPlayingCard extends StatelessWidget {
   final DeviceView device;
   final MediaState? media;
 
-  const _NowPlayingCard({required this.service, required this.device, required this.media});
+  const _NowPlayingCard({
+    required this.service,
+    required this.device,
+    required this.media,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -184,18 +244,21 @@ class _NowPlayingCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(m.title.isEmpty ? 'Unknown track' : m.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.w600, color: WeDropColors.ink)),
+                      Text(
+                        m.title.isEmpty ? 'Unknown track' : m.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.title.copyWith(fontSize: 16),
+                      ),
                       if (m.artist.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
-                          child: Text(m.artist,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 13, color: WeDropColors.inkFaint)),
+                          child: Text(
+                            m.artist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppText.label,
+                          ),
                         ),
                     ],
                   ),
@@ -206,15 +269,20 @@ class _NowPlayingCard extends StatelessWidget {
             _ControllerSeekBar(
               position: m.position,
               duration: m.duration,
-              onSeek: (target) =>
-                  service.sendMediaCommand(device.deviceId, MediaCommand.seek, position: target),
+              onSeek: (target) => service.sendMediaCommand(
+                device.deviceId,
+                MediaCommand.seek,
+                position: target,
+              ),
             ),
             const SizedBox(height: 4),
           ] else
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text('Nothing playing right now',
-                  style: TextStyle(fontSize: 13, color: WeDropColors.inkFaint)),
+              child: Text(
+                'Nothing playing right now',
+                style: TextStyle(fontSize: 13, color: WeDropColors.inkFaint),
+              ),
             ),
           const SizedBox(height: 8),
           Row(
@@ -222,7 +290,9 @@ class _NowPlayingCard extends StatelessWidget {
             children: [
               _transportBtn(Icons.skip_previous_rounded, MediaCommand.prev),
               _transportBtn(
-                m?.playing == true ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                m?.playing == true
+                    ? Icons.pause_rounded
+                    : Icons.play_arrow_rounded,
                 MediaCommand.playPause,
                 large: true,
               ),
@@ -252,7 +322,11 @@ class _ControllerSeekBar extends StatefulWidget {
   final int duration;
   final void Function(int targetMillis) onSeek;
 
-  const _ControllerSeekBar({required this.position, required this.duration, required this.onSeek});
+  const _ControllerSeekBar({
+    required this.position,
+    required this.duration,
+    required this.onSeek,
+  });
 
   @override
   State<_ControllerSeekBar> createState() => _ControllerSeekBarState();
@@ -283,7 +357,7 @@ class _ControllerSeekBarState extends State<_ControllerSeekBar> {
 
     if (!known) {
       return ClipRRect(
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(Radii.pill),
         child: const LinearProgressIndicator(
           minHeight: 4,
           backgroundColor: WeDropColors.border,
@@ -326,10 +400,20 @@ class _ControllerSeekBarState extends State<_ControllerSeekBar> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(_fmt(_dragValue == null ? widget.position : value.toInt()),
-                  style: const TextStyle(fontSize: 11, color: WeDropColors.inkFaint)),
-              Text(_fmt(widget.duration),
-                  style: const TextStyle(fontSize: 11, color: WeDropColors.inkFaint)),
+              Text(
+                _fmt(_dragValue == null ? widget.position : value.toInt()),
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: WeDropColors.inkFaint,
+                ),
+              ),
+              Text(
+                _fmt(widget.duration),
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: WeDropColors.inkFaint,
+                ),
+              ),
             ],
           ),
         ),
@@ -350,7 +434,11 @@ class _SystemVolumeCard extends StatefulWidget {
   final DeviceView device;
   final int volume;
 
-  const _SystemVolumeCard({required this.service, required this.device, required this.volume});
+  const _SystemVolumeCard({
+    required this.service,
+    required this.device,
+    required this.volume,
+  });
 
   @override
   State<_SystemVolumeCard> createState() => _SystemVolumeCardState();
@@ -377,7 +465,9 @@ class _SystemVolumeCardState extends State<_SystemVolumeCard> {
                     ? SliderTheme(
                         data: SliderTheme.of(context).copyWith(
                           trackHeight: 4,
-                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                          thumbShape: const RoundSliderThumbShape(
+                            enabledThumbRadius: 7,
+                          ),
                           activeTrackColor: WeDropColors.brand,
                           inactiveTrackColor: WeDropColors.border,
                           thumbColor: WeDropColors.brand,
@@ -399,7 +489,10 @@ class _SystemVolumeCardState extends State<_SystemVolumeCard> {
                       )
                     : const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 12),
-                        child: Text('Unavailable', style: TextStyle(color: WeDropColors.inkFaint)),
+                        child: Text(
+                          'Unavailable',
+                          style: TextStyle(color: WeDropColors.inkFaint),
+                        ),
                       ),
               ),
               const Icon(Icons.volume_up_rounded, color: WeDropColors.inkDim),
@@ -418,7 +511,11 @@ class _AppMixerCard extends StatelessWidget {
   final DeviceView device;
   final List<AppVolumeSummary> apps;
 
-  const _AppMixerCard({required this.service, required this.device, required this.apps});
+  const _AppMixerCard({
+    required this.service,
+    required this.device,
+    required this.apps,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -427,7 +524,9 @@ class _AppMixerCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SectionHeader(title: 'App volumes'),
-          ...apps.map((a) => _AppVolumeRow(service: service, device: device, app: a)),
+          ...apps.map(
+            (a) => _AppVolumeRow(service: service, device: device, app: a),
+          ),
         ],
       ),
     );
@@ -439,7 +538,11 @@ class _AppVolumeRow extends StatefulWidget {
   final DeviceView device;
   final AppVolumeSummary app;
 
-  const _AppVolumeRow({required this.service, required this.device, required this.app});
+  const _AppVolumeRow({
+    required this.service,
+    required this.device,
+    required this.app,
+  });
 
   @override
   State<_AppVolumeRow> createState() => _AppVolumeRowState();
@@ -450,7 +553,10 @@ class _AppVolumeRowState extends State<_AppVolumeRow> {
 
   @override
   Widget build(BuildContext context) {
-    final value = (_dragValue ?? widget.app.volume.toDouble()).clamp(0.0, 100.0);
+    final value = (_dragValue ?? widget.app.volume.toDouble()).clamp(
+      0.0,
+      100.0,
+    );
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -458,19 +564,25 @@ class _AppVolumeRowState extends State<_AppVolumeRow> {
         children: [
           SizedBox(
             width: 90,
-            child: Text(widget.app.name.isEmpty ? widget.app.id : widget.app.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12.5, color: WeDropColors.inkDim)),
+            child: Text(
+              widget.app.name.isEmpty ? widget.app.id : widget.app.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppText.caption.copyWith(color: WeDropColors.inkDim),
+            ),
           ),
           Expanded(
             child: SliderTheme(
               data: SliderTheme.of(context).copyWith(
                 trackHeight: 3,
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                activeTrackColor: widget.app.muted ? WeDropColors.inkFaint : WeDropColors.accent,
+                activeTrackColor: widget.app.muted
+                    ? WeDropColors.inkFaint
+                    : WeDropColors.accent,
                 inactiveTrackColor: WeDropColors.border,
-                thumbColor: widget.app.muted ? WeDropColors.inkFaint : WeDropColors.accent,
+                thumbColor: widget.app.muted
+                    ? WeDropColors.inkFaint
+                    : WeDropColors.accent,
               ),
               child: Slider(
                 min: 0,
@@ -492,9 +604,13 @@ class _AppVolumeRowState extends State<_AppVolumeRow> {
           IconButton(
             visualDensity: VisualDensity.compact,
             icon: Icon(
-              widget.app.muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+              widget.app.muted
+                  ? Icons.volume_off_rounded
+                  : Icons.volume_up_rounded,
               size: 18,
-              color: widget.app.muted ? WeDropColors.danger : WeDropColors.inkFaint,
+              color: widget.app.muted
+                  ? WeDropColors.danger
+                  : WeDropColors.inkFaint,
             ),
             onPressed: () => widget.service.sendMediaCommand(
               widget.device.deviceId,
@@ -517,7 +633,11 @@ class _OutputDeviceCard extends StatelessWidget {
   final DeviceView device;
   final List<AudioDeviceSummary> devices;
 
-  const _OutputDeviceCard({required this.service, required this.device, required this.devices});
+  const _OutputDeviceCard({
+    required this.service,
+    required this.device,
+    required this.devices,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -528,30 +648,40 @@ class _OutputDeviceCard extends StatelessWidget {
           const SectionHeader(title: 'Output device'),
           ...devices.map((d) {
             return InkWell(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(Radii.control),
               onTap: d.isDefault
                   ? null
-                  : () => service.sendMediaCommand(device.deviceId, MediaCommand.selectAudioDevice,
-                      deviceId: d.id),
+                  : () => service.sendMediaCommand(
+                      device.deviceId,
+                      MediaCommand.selectAudioDevice,
+                      deviceId: d.id,
+                    ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Row(
                   children: [
                     Icon(
-                      d.isDefault ? Icons.check_circle_rounded : Icons.circle_outlined,
+                      d.isDefault
+                          ? Icons.check_circle_rounded
+                          : Icons.circle_outlined,
                       size: 20,
-                      color: d.isDefault ? WeDropColors.brand : WeDropColors.inkFaint,
+                      color: d.isDefault
+                          ? WeDropColors.brand
+                          : WeDropColors.inkFaint,
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Text(d.name.isEmpty ? d.id : d.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: d.isDefault ? FontWeight.w600 : FontWeight.w400,
-                            color: WeDropColors.ink,
-                          )),
+                      child: Text(
+                        d.name.isEmpty ? d.id : d.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.label.copyWith(
+                          fontWeight: d.isDefault
+                              ? FontWeight.w600
+                              : FontWeight.w400,
+                          color: WeDropColors.ink,
+                        ),
+                      ),
                     ),
                   ],
                 ),

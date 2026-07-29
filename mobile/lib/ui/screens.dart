@@ -30,7 +30,7 @@ class DevicesScreen extends StatelessWidget {
     final nearby = service.discoveredDevices;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+      padding: const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, 100),
       children: [
         SectionHeader(
           title: 'My ecosystem',
@@ -46,19 +46,22 @@ class DevicesScreen extends StatelessWidget {
           const EmptyState(
             icon: Icons.devices_rounded,
             title: 'Your ecosystem is empty',
-            hint: 'Pair a device below and it will start sharing clipboard, files and '
+            hint:
+                'Pair a device below and it will start sharing clipboard, files and '
                 'notifications straight away.',
           )
         else
-          ...paired.map((device) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: PairedDeviceTile(
-                  device: device,
-                  service: service,
-                  onSendFiles: () => onSendFiles(device),
-                  onOpen: () => onOpenDevice(device),
-                ),
-              )),
+          ...paired.map(
+            (device) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: PairedDeviceTile(
+                device: device,
+                service: service,
+                onSendFiles: () => onSendFiles(device),
+                onOpen: () => onOpenDevice(device),
+              ),
+            ),
+          ),
 
         const SizedBox(height: 28),
         const SectionHeader(
@@ -69,89 +72,66 @@ class DevicesScreen extends StatelessWidget {
           const EmptyState(
             icon: Icons.radar_rounded,
             title: 'Nothing new nearby',
-            hint: 'Open WeDrop on your other devices and check they are on the same Wi-Fi.',
+            hint:
+                'Open WeDrop on your other devices and check they are on the same Wi-Fi.',
           )
         else
-          ...nearby.map((device) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: WdCard(
-                  child: Row(
-                    children: [
-                      _DeviceGlyph(formFactor: device.formFactor),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              device.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 14.5,
-                                fontWeight: FontWeight.w600,
-                                color: WeDropColors.ink,
-                              ),
+          ...nearby.map(
+            (device) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: WdCard(
+                child: Row(
+                  children: [
+                    WdIconBadge(icon: iconForFormFactor(device.formFactor)),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            device.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w600,
+                              color: WeDropColors.ink,
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '${device.platform} · ${device.ip}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: WeDropColors.inkFaint,
-                              ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${device.platform} · ${device.ip}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: WeDropColors.inkFaint,
                             ),
-                          ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    FilledButton(
+                      onPressed: pairingWith == device.deviceId
+                          ? null
+                          : () => onPair(device.deviceId),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      FilledButton(
-                        onPressed: pairingWith == device.deviceId
-                            ? null
-                            : () => onPair(device.deviceId),
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        ),
-                        child: Text(pairingWith == device.deviceId ? 'Waiting…' : 'Pair'),
+                      child: Text(
+                        pairingWith == device.deviceId ? 'Waiting…' : 'Pair',
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              )),
+              ),
+            ),
+          ),
       ],
-    );
-  }
-}
-
-class _DeviceGlyph extends StatelessWidget {
-  final String formFactor;
-  final bool connected;
-
-  const _DeviceGlyph({required this.formFactor, this.connected = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 46,
-      height: 46,
-      decoration: BoxDecoration(
-        color: connected
-            ? WeDropColors.success.withValues(alpha: 0.12)
-            : WeDropColors.surfaceHi,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(
-          color: connected
-              ? WeDropColors.success.withValues(alpha: 0.35)
-              : WeDropColors.border,
-        ),
-      ),
-      child: Icon(
-        iconForFormFactor(formFactor),
-        size: 21,
-        color: connected ? WeDropColors.success : WeDropColors.inkDim,
-      ),
     );
   }
 }
@@ -167,14 +147,14 @@ class _BatteryPill extends StatelessWidget {
     final colour = level <= 15
         ? WeDropColors.danger
         : level <= 35
-            ? WeDropColors.warn
-            : WeDropColors.success;
+        ? WeDropColors.warn
+        : WeDropColors.success;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: colour.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(Radii.pill),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -185,8 +165,14 @@ class _BatteryPill extends StatelessWidget {
             color: colour,
           ),
           const SizedBox(width: 2),
-          Text('$level%',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: colour)),
+          Text(
+            '$level%',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: colour,
+            ),
+          ),
         ],
       ),
     );
@@ -225,15 +211,15 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
     final status = device.connected
         ? 'connected'
         : device.online
-            ? 'online'
-            : 'offline';
+        ? 'online'
+        : 'offline';
     final statusLabel = device.connected
         ? 'Connected'
         : device.online
-            ? 'On the network'
-            : device.lastSeen > 0
-                ? 'Last seen ${timeAgo(device.lastSeen)}'
-                : 'Offline';
+        ? 'On the network'
+        : device.lastSeen > 0
+        ? 'Last seen ${timeAgo(device.lastSeen)}'
+        : 'Offline';
 
     return WdCard(
       padding: EdgeInsets.zero,
@@ -245,12 +231,18 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
           // Tapping the header opens the full remote-control screen.
           InkWell(
             onTap: device.connected ? widget.onOpen : null,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(Radii.card),
+            ),
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(Space.lg),
               child: Row(
                 children: [
-                  _DeviceGlyph(formFactor: device.formFactor, connected: device.connected),
+                  WdIconBadge(
+                    icon: iconForFormFactor(device.formFactor),
+                    colour: WeDropColors.success,
+                    tinted: device.connected,
+                  ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
@@ -323,19 +315,29 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
           const Divider(height: 1),
           InkWell(
             onTap: () => setState(() => _expanded = !_expanded),
-            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+            borderRadius: const BorderRadius.vertical(
+              bottom: Radius.circular(Radii.card),
+            ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+              padding: const EdgeInsets.symmetric(
+                horizontal: Space.lg,
+                vertical: 11,
+              ),
               child: Row(
                 children: [
                   const Expanded(
                     child: Text(
                       'What this device may do',
-                      style: TextStyle(fontSize: 12.5, color: WeDropColors.inkFaint),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: WeDropColors.inkFaint,
+                      ),
                     ),
                   ),
                   Icon(
-                    _expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                    _expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
                     size: 20,
                     color: WeDropColors.inkFaint,
                   ),
@@ -349,15 +351,31 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Column(
                 children: [
-                  _permission('Share clipboard', Capability.clipboard, device.allowClipboard),
-                  _permission('Send me files', Capability.files, device.allowFiles),
+                  _permission(
+                    'Share clipboard',
+                    Capability.clipboard,
+                    device.allowClipboard,
+                  ),
+                  _permission(
+                    'Send me files',
+                    Capability.files,
+                    device.allowFiles,
+                  ),
                   _permission(
                     'Mirror notifications',
                     Capability.notifications,
                     device.allowNotifications,
                   ),
-                  _permission('Control my media', Capability.media, device.allowMedia),
-                  _permission('Run workspace actions', Capability.workspace, device.allowWorkspace),
+                  _permission(
+                    'Control my media',
+                    Capability.media,
+                    device.allowMedia,
+                  ),
+                  _permission(
+                    'Run workspace actions',
+                    Capability.workspace,
+                    device.allowWorkspace,
+                  ),
                 ],
               ),
             ),
@@ -368,7 +386,8 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
 
   Widget _mediaButton(IconData icon, String command) {
     return IconButton(
-      onPressed: () => widget.service.sendMediaCommand(widget.device.deviceId, command),
+      onPressed: () =>
+          widget.service.sendMediaCommand(widget.device.deviceId, command),
       icon: Icon(icon),
       color: WeDropColors.inkDim,
       iconSize: 22,
@@ -414,7 +433,10 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
                       media.artist,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, color: WeDropColors.inkFaint),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: WeDropColors.inkFaint,
+                      ),
                     ),
                   ),
                 ],
@@ -422,9 +444,11 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
             ),
             const SizedBox(height: 6),
             ClipRRect(
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: BorderRadius.circular(Radii.pill),
               child: LinearProgressIndicator(
-                value: known ? (media.position / media.duration).clamp(0.0, 1.0) : null,
+                value: known
+                    ? (media.position / media.duration).clamp(0.0, 1.0)
+                    : null,
                 minHeight: 3,
                 backgroundColor: WeDropColors.border,
                 valueColor: const AlwaysStoppedAnimation(WeDropColors.accent),
@@ -437,7 +461,9 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
             children: [
               _mediaButton(Icons.skip_previous_rounded, MediaCommand.prev),
               _mediaButton(
-                media?.playing == true ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                media?.playing == true
+                    ? Icons.pause_rounded
+                    : Icons.play_arrow_rounded,
                 MediaCommand.playPause,
               ),
               _mediaButton(Icons.skip_next_rounded, MediaCommand.next),
@@ -463,8 +489,11 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
           ),
           Switch(
             value: value,
-            onChanged: (next) =>
-                widget.service.setPermission(widget.device.deviceId, capability, next),
+            onChanged: (next) => widget.service.setPermission(
+              widget.device.deviceId,
+              capability,
+              next,
+            ),
           ),
         ],
       ),
@@ -480,7 +509,10 @@ class _PairedDeviceTileState extends State<PairedDeviceTile> {
           'It will stop syncing immediately, and you will both need to pair again to reconnect.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             style: TextButton.styleFrom(foregroundColor: WeDropColors.danger),
@@ -506,29 +538,35 @@ class TransfersScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     if (service.transfers.isEmpty) {
       return const Padding(
-        padding: EdgeInsets.fromLTRB(16, 8, 16, 100),
+        padding: EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, 100),
         child: EmptyState(
           icon: Icons.swap_horiz_rounded,
           title: 'No transfers yet',
-          hint: 'Send a file from a device, or share to WeDrop from any other app.',
+          hint:
+              'Send a file from a device, or share to WeDrop from any other app.',
         ),
       );
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+      padding: const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, 100),
       itemCount: service.transfers.length,
       separatorBuilder: (_, index) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final transfer = service.transfers[index];
-        final ratio = transfer.size > 0 ? transfer.transferred / transfer.size : 0.0;
+        final ratio = transfer.size > 0
+            ? transfer.transferred / transfer.size
+            : 0.0;
 
         final (label, colour) = switch (transfer.status) {
           TransferStatus.completed => ('Done', WeDropColors.success),
           TransferStatus.failed => ('Failed', WeDropColors.danger),
           TransferStatus.declined => ('Declined', WeDropColors.warn),
           TransferStatus.pending => ('Waiting', WeDropColors.brandSoft),
-          TransferStatus.active => ('${(ratio * 100).round()}%', WeDropColors.brandSoft),
+          TransferStatus.active => (
+            '${(ratio * 100).round()}%',
+            WeDropColors.brandSoft,
+          ),
         };
 
         return WdCard(
@@ -536,19 +574,15 @@ class TransfersScreen extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: (transfer.incoming ? WeDropColors.accent : WeDropColors.brand)
-                          .withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      transfer.incoming ? Icons.download_rounded : Icons.upload_rounded,
-                      size: 18,
-                      color: transfer.incoming ? WeDropColors.accent : WeDropColors.brand,
-                    ),
+                  WdIconBadge(
+                    icon: transfer.incoming
+                        ? Icons.download_rounded
+                        : Icons.upload_rounded,
+                    colour: transfer.incoming
+                        ? WeDropColors.accent
+                        : WeDropColors.brand,
+                    size: 38,
+                    tinted: true,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -580,7 +614,10 @@ class TransfersScreen extends StatelessWidget {
                           '${transfer.error.isNotEmpty ? ' · ${transfer.error}' : ''}',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, color: WeDropColors.inkFaint),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: WeDropColors.inkFaint,
+                          ),
                         ),
                       ],
                     ),
@@ -591,12 +628,14 @@ class TransfersScreen extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(999),
+                    borderRadius: BorderRadius.circular(Radii.pill),
                     child: LinearProgressIndicator(
                       value: transfer.size > 0 ? ratio : null,
                       minHeight: 5,
                       backgroundColor: WeDropColors.border,
-                      valueColor: const AlwaysStoppedAnimation(WeDropColors.brand),
+                      valueColor: const AlwaysStoppedAnimation(
+                        WeDropColors.brand,
+                      ),
                     ),
                   ),
                 ),
@@ -617,7 +656,7 @@ class ClipboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+      padding: const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, 100),
       children: [
         SectionHeader(
           title: 'Clipboard',
@@ -644,7 +683,10 @@ class ClipboardScreen extends StatelessWidget {
                 icon: const Icon(Icons.send_rounded, size: 16),
                 label: const Text('Send'),
                 style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
                 ),
               ),
             ],
@@ -654,55 +696,63 @@ class ClipboardScreen extends StatelessWidget {
           const EmptyState(
             icon: Icons.content_paste_rounded,
             title: 'Nothing shared yet',
-            hint: 'Copy some text on any paired device and it will appear here.',
+            hint:
+                'Copy some text on any paired device and it will appear here.',
           )
         else
-          ...service.clipboardHistory.map((entry) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: WdCard(
-                  onTap: () async {
-                    await service.copyToClipboard(entry.text);
-                    if (context.mounted) _snack(context, 'Copied');
-                  },
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        entry.text,
-                        maxLines: 4,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13.5,
-                          color: WeDropColors.inkDim,
-                          height: 1.45,
-                        ),
+          ...service.clipboardHistory.map(
+            (entry) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: WdCard(
+                onTap: () async {
+                  await service.copyToClipboard(entry.text);
+                  if (context.mounted) _snack(context, 'Copied');
+                },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      entry.text,
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        color: WeDropColors.inkDim,
+                        height: 1.45,
                       ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          WdBadge(
-                            entry.incoming ? 'from ${entry.originName}' : 'this device',
-                            colour: entry.incoming
-                                ? WeDropColors.brandSoft
-                                : WeDropColors.inkFaint,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            timeAgo(entry.time),
-                            style: const TextStyle(fontSize: 11.5, color: WeDropColors.inkFaint),
-                          ),
-                          const Spacer(),
-                          const Icon(
-                            Icons.copy_rounded,
-                            size: 15,
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        WdBadge(
+                          entry.incoming
+                              ? 'from ${entry.originName}'
+                              : 'this device',
+                          colour: entry.incoming
+                              ? WeDropColors.brandSoft
+                              : WeDropColors.inkFaint,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          timeAgo(entry.time),
+                          style: const TextStyle(
+                            fontSize: 11.5,
                             color: WeDropColors.inkFaint,
                           ),
-                        ],
-                      ),
-                    ],
-                  ),
+                        ),
+                        const Spacer(),
+                        const Icon(
+                          Icons.copy_rounded,
+                          size: 15,
+                          color: WeDropColors.inkFaint,
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              )),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -717,7 +767,7 @@ class NotificationsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+      padding: const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, 100),
       children: [
         SectionHeader(
           title: 'Notifications',
@@ -734,19 +784,28 @@ class NotificationsScreen extends StatelessWidget {
 
         // Mirroring this phone's own alerts needs a permission only the user
         // can grant, in a settings screen we can open but not bypass.
-        if (service.settings.shareNotifications && !service.hasNotificationAccess)
+        if (service.settings.shareNotifications &&
+            !service.hasNotificationAccess)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: WdCard(
               borderColor: WeDropColors.warn.withValues(alpha: 0.35),
               child: Row(
                 children: [
-                  const Icon(Icons.info_outline_rounded, color: WeDropColors.warn, size: 20),
+                  const Icon(
+                    Icons.info_outline_rounded,
+                    color: WeDropColors.warn,
+                    size: 20,
+                  ),
                   const SizedBox(width: 12),
                   const Expanded(
                     child: Text(
                       'To mirror this phone\'s notifications, WeDrop needs notification access.',
-                      style: TextStyle(fontSize: 12.5, color: WeDropColors.inkDim, height: 1.4),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: WeDropColors.inkDim,
+                        height: 1.4,
+                      ),
                     ),
                   ),
                   TextButton(
@@ -768,71 +827,65 @@ class NotificationsScreen extends StatelessWidget {
             hint: 'Notifications from your other devices will show up here.',
           )
         else
-          ...service.notifications.map((notification) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: WdCard(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: WeDropColors.surfaceHi,
-                          borderRadius: BorderRadius.circular(11),
-                        ),
-                        child: const Icon(
-                          Icons.notifications_rounded,
-                          size: 17,
-                          color: WeDropColors.inkFaint,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
+          ...service.notifications.map(
+            (notification) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: WdCard(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const WdIconBadge(
+                      icon: Icons.notifications_rounded,
+                      size: 36,
+                      iconSize: 17,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            notification.title.isEmpty
+                                ? notification.app
+                                : notification.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w500,
+                              color: WeDropColors.ink,
+                            ),
+                          ),
+                          if (notification.body.isNotEmpty) ...[
+                            const SizedBox(height: 3),
                             Text(
-                              notification.title.isEmpty
-                                  ? notification.app
-                                  : notification.title,
-                              maxLines: 1,
+                              notification.body,
+                              maxLines: 3,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w500,
-                                color: WeDropColors.ink,
-                              ),
-                            ),
-                            if (notification.body.isNotEmpty) ...[
-                              const SizedBox(height: 3),
-                              Text(
-                                notification.body,
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 12.5,
-                                  color: WeDropColors.inkDim,
-                                  height: 1.4,
-                                ),
-                              ),
-                            ],
-                            const SizedBox(height: 6),
-                            Text(
-                              '${notification.app} · ${notification.deviceName} · '
-                              '${timeAgo(notification.time)}',
-                              style: const TextStyle(
-                                fontSize: 11.5,
-                                color: WeDropColors.inkFaint,
+                                fontSize: 12.5,
+                                color: WeDropColors.inkDim,
+                                height: 1.4,
                               ),
                             ),
                           ],
-                        ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '${notification.app} · ${notification.deviceName} · '
+                            '${timeAgo(notification.time)}',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              color: WeDropColors.inkFaint,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              )),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -854,8 +907,9 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late final TextEditingController _nameController =
-      TextEditingController(text: widget.service.deviceName);
+  late final TextEditingController _nameController = TextEditingController(
+    text: widget.service.deviceName,
+  );
 
   @override
   void dispose() {
@@ -875,14 +929,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final settings = service.settings;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+      padding: const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, 100),
       children: [
         const SectionHeader(
           title: 'Settings',
           hint: 'How this device behaves inside your ecosystem.',
         ),
         WdCard(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: Space.lg),
           child: Column(
             children: [
               SettingTile(
@@ -894,11 +948,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     controller: _nameController,
                     textAlign: TextAlign.right,
                     maxLength: 48,
-                    style: const TextStyle(fontSize: 13, color: WeDropColors.ink),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: WeDropColors.ink,
+                    ),
                     decoration: const InputDecoration(
                       counterText: '',
                       isDense: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                     ),
                     onSubmitted: (value) => service.setDeviceName(value),
                     onTapOutside: (_) {
@@ -912,7 +972,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               SettingTile(
                 title: 'Visible on this network',
-                description: 'Announce this device so others can find and pair with it.',
+                description:
+                    'Announce this device so others can find and pair with it.',
                 control: Switch(
                   value: settings.discoverable,
                   onChanged: (v) => _patch((s) => s.discoverable = v),
@@ -934,12 +995,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 20),
         const SectionHeader(title: 'Clipboard'),
         WdCard(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: Space.lg),
           child: Column(
             children: [
               SettingTile(
                 title: 'Share my clipboard automatically',
-                description: 'Anything you copy here is sent to your ecosystem.',
+                description:
+                    'Anything you copy here is sent to your ecosystem.',
                 control: Switch(
                   value: settings.autoSyncClipboard,
                   onChanged: (v) => _patch((s) => s.autoSyncClipboard = v),
@@ -947,7 +1009,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               SettingTile(
                 title: 'Apply clipboard from other devices',
-                description: 'Let paired devices update this phone\'s clipboard.',
+                description:
+                    'Let paired devices update this phone\'s clipboard.',
                 control: Switch(
                   value: settings.receiveClipboard,
                   onChanged: (v) => _patch((s) => s.receiveClipboard = v),
@@ -961,12 +1024,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 20),
         const SectionHeader(title: 'Files'),
         WdCard(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: Space.lg),
           child: Column(
             children: [
               SettingTile(
                 title: 'Accept files without asking',
-                description: 'Files from paired devices are saved straight away.',
+                description:
+                    'Files from paired devices are saved straight away.',
                 control: Switch(
                   value: settings.autoAcceptFiles,
                   onChanged: (v) => _patch((s) => s.autoAcceptFiles = v),
@@ -985,7 +1049,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 20),
         const SectionHeader(title: 'Notifications and media'),
         WdCard(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: Space.lg),
           child: Column(
             children: [
               SettingTile(
@@ -1007,7 +1071,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               SettingTile(
                 title: 'Let other devices control my media',
-                description: 'Play, pause and volume commands are applied here.',
+                description:
+                    'Play, pause and volume commands are applied here.',
                 control: Switch(
                   value: settings.allowMediaControl,
                   onChanged: (v) => _patch((s) => s.allowMediaControl = v),
@@ -1015,7 +1080,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               SettingTile(
                 title: 'Allow shell/script commands',
-                description: 'Off by default. Lets a "My Workspace" button run an arbitrary '
+                description:
+                    'Off by default. Lets a "My Workspace" button run an arbitrary '
                     'command on this device — only turn this on for devices you fully trust.',
                 control: Switch(
                   value: settings.allowAutomation,
@@ -1030,15 +1096,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 20),
         const SectionHeader(
           title: 'Advanced',
-          hint: 'Show extra detail like network, CPU and memory on a device\'s overview.',
+          hint:
+              'Show extra detail like network, CPU and memory on a device\'s overview.',
         ),
         WdCard(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: Space.lg),
           child: Column(
             children: [
               SettingTile(
                 title: 'Show advanced device stats',
-                description: 'Adds network, CPU and memory to battery and sound.',
+                description:
+                    'Adds network, CPU and memory to battery and sound.',
                 control: Switch(
                   value: settings.showAdvancedFeatures,
                   onChanged: (v) => _patch((s) => s.showAdvancedFeatures = v),
@@ -1052,17 +1120,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 20),
         const SectionHeader(
           title: 'Background',
-          hint: 'WeDrop shows a "connected devices" notification while it is '
+          hint:
+              'WeDrop shows a "connected devices" notification while it is '
               'reachable — that is what keeps files, clipboard and notifications flowing. '
               'You can dismiss it any time; it reappears when the connection state changes.',
         ),
         WdCard(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: Space.lg),
           child: Column(
             children: [
               SettingTile(
                 title: 'Ignore battery optimisation',
-                description: 'Stops Android suspending WeDrop while your screen is off.',
+                description:
+                    'Stops Android suspending WeDrop while your screen is off.',
                 control: TextButton(
                   onPressed: BatteryOptimisationRequest.open,
                   child: const Text('Open'),
@@ -1108,7 +1178,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: WeDropColors.bgSoft,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(Radii.control),
           ),
           child: SelectableText(
             value,
