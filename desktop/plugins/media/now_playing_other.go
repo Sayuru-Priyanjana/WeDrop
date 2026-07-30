@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !linux
 
 package media
 
@@ -8,9 +8,10 @@ import "wedrop/core/protocol"
 // identically across platforms.
 const nowPlayingInterval = 0
 
-// collectNowPlaying has no implementation on this platform yet; reporting "no
-// media" is the honest answer rather than fabricating one. playerID is
-// accepted only so callers compile identically across platforms.
+// collectNowPlaying has no implementation on this platform yet (Linux has
+// its own real one via MPRIS — see mpris_linux.go); reporting "no media" is
+// the honest answer rather than fabricating one. playerID is accepted only
+// so callers compile identically across platforms.
 func collectNowPlaying(playerID string) protocol.MediaState {
 	return protocol.MediaState{Type: protocol.TypeMediaState, HasMedia: false}
 }
