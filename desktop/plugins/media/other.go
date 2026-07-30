@@ -1,122 +1,42 @@
-//go:build !windows
+//go:build darwin
 
 package media
 
 import (
 	"fmt"
 	"os/exec"
-	"runtime"
 
 	"wedrop/core/protocol"
 )
 
-// applyMediaCommand drives playback on Linux and macOS.
+// applyMediaCommand drives playback on macOS.
 //
-// Linux goes through playerctl, the standard MPRIS client. macOS has no
-// scriptable equivalent that works across every player, so it falls back to
-// controlling the system-wide media keys via osascript.
+// macOS has no scriptable MPRIS-style equivalent that works across every
+// player, so this falls back to controlling the system-wide media keys via
+// osascript.
 func applyMediaCommand(command string) error {
-	switch runtime.GOOS {
-	case "linux":
-		return linuxMedia(command)
-	case "darwin":
-		return darwinMedia(command)
-	}
-	return fmt.Errorf("media control is not supported on %s", runtime.GOOS)
+	return darwinMedia(command)
 }
 
 // setVolumePlatform is not implemented on this platform yet.
 func setVolumePlatform(percent int) error {
-	return fmt.Errorf("setting an absolute volume is not supported on %s yet", runtime.GOOS)
+	return fmt.Errorf("setting an absolute volume is not supported on darwin yet")
 }
 
-// listPlayers, applyCommandToPlayer, seekPlayer, listAudioDevices,
-// setDefaultAudioDevice, listAppVolumes and setAppVolumePercent are Windows-
-// only additions (real multi-player/session and Core Audio support) with no
+// listPlayers, applyCommandToPlayer and seekPlayer are Linux-only additions
+// (real multi-player/session support via MPRIS, see mpris_linux.go) with no
 // implementation here yet; honest "not supported"/empty results rather than
 // guessed behaviour.
 func listPlayers() ([]PlayerInfo, error) {
-	return nil, fmt.Errorf("listing players is not supported on %s yet", runtime.GOOS)
+	return nil, fmt.Errorf("listing players is not supported on darwin yet")
 }
 
 func applyCommandToPlayer(playerID, command string) error {
-	return fmt.Errorf("per-player control is not supported on %s yet", runtime.GOOS)
+	return fmt.Errorf("per-player control is not supported on darwin yet")
 }
 
 func seekPlayer(playerID string, positionMs int64) error {
-	return fmt.Errorf("per-player seek is not supported on %s yet", runtime.GOOS)
-}
-
-func listAudioDevices() ([]AudioDevice, error) {
-	return nil, fmt.Errorf("listing audio devices is not supported on %s yet", runtime.GOOS)
-}
-
-func setDefaultAudioDevice(deviceID string) error {
-	return fmt.Errorf("switching the audio device is not supported on %s yet", runtime.GOOS)
-}
-
-func listAppVolumes() ([]AppVolume, error) {
-	return nil, fmt.Errorf("per-app volume is not supported on %s yet", runtime.GOOS)
-}
-
-func setAppVolumePercent(id string, percent int) error {
-	return fmt.Errorf("per-app volume is not supported on %s yet", runtime.GOOS)
-}
-
-func setAppMute(id string, muted bool) error {
-	return fmt.Errorf("per-app volume is not supported on %s yet", runtime.GOOS)
-}
-
-// PlayerInfo, AudioDevice and AppVolume are declared per-platform (see
-// smtc_windows.go / audio_windows.go) since their fields depend on what each
-// platform can actually report; these are the shapes every other platform
-// must match so plugin.go can use them uniformly.
-type PlayerInfo struct {
-	ID      string
-	Title   string
-	Artist  string
-	Playing bool
-}
-
-type AudioDevice struct {
-	ID      string
-	Name    string
-	Default bool
-}
-
-type AppVolume struct {
-	ID     string
-	Name   string
-	Volume int
-	Muted  bool
-}
-
-func linuxMedia(command string) error {
-	var args []string
-
-	switch command {
-	case protocol.MediaPlayPause:
-		args = []string{"play-pause"}
-	case protocol.MediaNext:
-		args = []string{"next"}
-	case protocol.MediaPrev:
-		args = []string{"previous"}
-	case protocol.MediaStop:
-		args = []string{"stop"}
-	case protocol.MediaVolUp:
-		args = []string{"volume", "0.05+"}
-	case protocol.MediaVolDown:
-		args = []string{"volume", "0.05-"}
-	case protocol.MediaMute:
-		args = []string{"volume", "0"}
-	default:
-		return fmt.Errorf("unknown media command %q", command)
-	}
-
-	if _, err := exec.LookPath("playerctl"); err != nil {
-		return fmt.Errorf("install playerctl to control media from other devices")
-	}
-	return exec.Command("playerctl", args...).Run()
+	return fmt.Errorf("per-player seek is not supported on darwin yet")
 }
 
 // macOS key codes for the media keys, used with the Accessibility API.
