@@ -473,7 +473,12 @@ class _WorkspaceBody extends StatelessWidget {
             ? service.workspaceButtonsOf(device.deviceId)
             : null,
         onConfigureButtons: instance.type == WidgetType.buttons
-            ? () => service.requestConfigureButtons(device.deviceId)
+            ? () {
+                service.requestConfigureButtons(device.deviceId);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('View on your desktop app to configure')),
+                );
+              }
             : null,
       ),
     );
@@ -712,9 +717,12 @@ class _WorkspaceBody extends StatelessWidget {
                           child: _WorkspaceGrid(
                             buttons: buttons,
                             onRun: _runButton,
-                            onConfigure: () => service.requestConfigureButtons(
-                              device.deviceId,
-                            ),
+                            onConfigure: () {
+                              service.requestConfigureButtons(device.deviceId);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('View on your desktop app to configure')),
+                              );
+                            },
                           ),
                         ),
                       ],
@@ -1474,7 +1482,12 @@ class _DynamicControlsCard extends StatelessWidget {
           if (needsConfigure)
             InlinePrompt(
               message: 'No buttons set up for $appName yet',
-              onTap: () => service.requestConfigureApp(device.deviceId, exe),
+              onTap: () {
+                service.requestConfigureApp(device.deviceId, exe);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('View on your desktop app to configure')),
+                );
+              },
             )
           else if (controls.isEmpty)
             const Text(

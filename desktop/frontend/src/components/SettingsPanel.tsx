@@ -183,6 +183,25 @@ export function SettingsPanel({
             }
             last
           />
+
+        </Card>
+      </div>
+
+      <div>
+        <SectionTitle title="Workspace" />
+        <Card className="px-6">
+          <SettingRow
+            title="Allow running shell commands"
+            description="Let paired devices run custom terminal/shell scripts configured in My Buttons."
+            control={
+              <Toggle
+                checked={settings.allow_automation}
+                onChange={(v) => patch({ allow_automation: v })}
+                label="Allow running shell commands"
+              />
+            }
+            last
+          />
         </Card>
       </div>
 
