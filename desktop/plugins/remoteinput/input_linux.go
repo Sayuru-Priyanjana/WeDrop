@@ -4,14 +4,71 @@ package remoteinput
 
 import (
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
+	"sync"
+	"time"
 
 	"wedrop/core/protocol"
 )
 
-func runXdotool(args ...string) error {
-	return exec.Command("xdotool", args...).Run()
+var (
+	xdoMu    sync.Mutex
+	xdoStdin io.WriteCloser
+	xdoCmd   *exec.Cmd
+)
+
+// ensureXdotool starts a persistent xdotool process reading from stdin.
+// This is critical for performance because spawning a new xdotool process
+// 60 times a second for mouse movements causes severe lag or drops events.
+func ensureXdotool() (io.WriteCloser, error) {
+	if xdoStdin != nil {
+		return xdoStdin, nil
+	}
+
+	cmd := exec.Command("xdotool", "-")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	xdoCmd = cmd
+	xdoStdin = stdin
+
+	// Restart it if it dies
+	go func() {
+		cmd.Wait()
+		xdoMu.Lock()
+		xdoStdin = nil
+		xdoCmd = nil
+		xdoMu.Unlock()
+	}()
+
+	return stdin, nil
+}
+
+func sendXdotoolCommand(cmd string) {
+	xdoMu.Lock()
+	defer xdoMu.Unlock()
+
+	stdin, err := ensureXdotool()
+	if err != nil {
+		// Fallback to one-off if daemon fails (should rarely happen)
+		exec.Command("sh", "-c", fmt.Sprintf("xdotool %s", cmd)).Run()
+		return
+	}
+
+	// Write the command with a newline
+	_, err = io.WriteString(stdin, cmd+"\n")
+	if err != nil {
+		xdoStdin.Close()
+		xdoStdin = nil
+	}
 }
 
 // applyRemoteInput injects one event onto this machine using xdotool.
@@ -21,50 +78,53 @@ func applyRemoteInput(in protocol.RemoteInput) {
 		// A speed multiplier makes the touchpad feel responsive
 		dx := int(in.DX * 1.6)
 		dy := int(in.DY * 1.6)
-		runXdotool("mousemove_relative", "--", fmt.Sprintf("%d", dx), fmt.Sprintf("%d", dy))
+		// xdotool mousemove_relative takes -- for negative coordinates, but when
+		// reading from stdin, it does not use getopt, so we can just pass the numbers.
+		// However, it's safer to keep -- if the stdin parser uses it. Wait, xdotool stdin
+		// parser is simple: `mousemove_relative -10 10` is supported without --.
+		sendXdotoolCommand(fmt.Sprintf("mousemove_relative %d %d", dx, dy))
 
 	case protocol.InputMouseLeft:
-		runXdotool("click", "1")
+		sendXdotoolCommand("click 1")
 	case protocol.InputMouseRight:
-		runXdotool("click", "3")
+		sendXdotoolCommand("click 3")
 	case protocol.InputMouseMiddle:
-		runXdotool("click", "2")
+		sendXdotoolCommand("click 2")
 	case protocol.InputMouseDown:
-		runXdotool("mousedown", "1")
+		sendXdotoolCommand("mousedown 1")
 	case protocol.InputMouseUp:
-		runXdotool("mouseup", "1")
+		sendXdotoolCommand("mouseup 1")
 
 	case protocol.InputScroll:
 		if in.DY > 0 {
-			// Scroll down
-			runXdotool("click", "5")
+			sendXdotoolCommand("click 5") // Scroll down
 		} else if in.DY < 0 {
-			// Scroll up
-			runXdotool("click", "4")
+			sendXdotoolCommand("click 4") // Scroll up
 		}
 
 	case protocol.InputType:
-		// We use type to simulate typing
-		runXdotool("type", in.Text)
+		// Escape single quotes for type command
+		text := strings.ReplaceAll(in.Text, "'", "'\\''")
+		sendXdotoolCommand(fmt.Sprintf("type '%s'", text))
 	case protocol.InputKey:
 		pressNamedKey(in.Key)
 
 	case protocol.InputPresentNext:
-		runXdotool("key", "Right")
+		sendXdotoolCommand("key Right")
 	case protocol.InputPresentPrev:
-		runXdotool("key", "Left")
+		sendXdotoolCommand("key Left")
 	case protocol.InputPresentStart:
-		runXdotool("key", "F5")
+		sendXdotoolCommand("key F5")
 	case protocol.InputPresentEnd:
-		runXdotool("key", "Escape")
+		sendXdotoolCommand("key Escape")
 	case protocol.InputPresentBlank:
-		runXdotool("key", "b")
+		sendXdotoolCommand("key b")
 	}
 }
 
 func pressNamedKey(key string) {
 	if xkey, ok := resolveKeyX11(key); ok {
-		runXdotool("key", xkey)
+		sendXdotoolCommand(fmt.Sprintf("key %s", xkey))
 	}
 }
 
@@ -142,5 +202,6 @@ func PressShortcut(modifiers []string, key string) error {
 	parts = append(parts, xkey)
 
 	combo := strings.Join(parts, "+")
-	return runXdotool("key", combo)
+	sendXdotoolCommand(fmt.Sprintf("key %s", combo))
+	return nil
 }
