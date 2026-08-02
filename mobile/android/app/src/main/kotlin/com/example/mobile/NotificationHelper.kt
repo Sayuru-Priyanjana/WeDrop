@@ -107,7 +107,7 @@ object NotificationHelper {
             // collapsed height. Dropping the title is what keeps "Send
             // clipboard" visible without the user having to expand this.
             .setContentText(status)
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setSmallIcon(R.mipmap.ic_launcher)
             // Dismissable, not pinned: the user can swipe this away like any
             // other notification.
             .setOngoing(false)
@@ -153,7 +153,7 @@ object NotificationHelper {
         val notification = NotificationCompat.Builder(context, PAIRING_CHANNEL)
             .setContentTitle("Pairing request")
             .setContentText("$deviceName wants to join your ecosystem")
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setAutoCancel(true)
@@ -177,7 +177,7 @@ object NotificationHelper {
             .setContentTitle(title.ifEmpty { "WeDrop" })
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setSmallIcon(android.R.drawable.stat_notify_chat)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
