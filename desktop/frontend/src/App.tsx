@@ -370,19 +370,7 @@ function Sidebar({
   return (
     <aside className="flex w-[248px] shrink-0 flex-col border-r border-border bg-bg-soft/80 px-5 py-7">
       <div className="mb-9 flex items-center gap-3 px-1">
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-ink text-bg">
-          <svg
-            viewBox="0 0 24 24"
-            className="h-5 w-5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M12 3v12M7.5 10.5L12 15l4.5-4.5M5 19h14" />
-          </svg>
-        </div>
+        <img src="/src/assets/wedrop.png" alt="WeDrop Logo" className="h-10 w-10 rounded-2xl object-cover" />
         <div>
           <h1 className="text-[17px] font-semibold tracking-tight">WeDrop</h1>
           <p className="text-[11.5px] text-ink-faint">

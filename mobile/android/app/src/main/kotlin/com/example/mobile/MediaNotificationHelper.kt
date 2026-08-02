@@ -146,7 +146,7 @@ object MediaNotificationHelper {
             .setContentTitle(title.ifEmpty { "Now playing" })
             .setContentText(subtitleParts.joinToString(" · "))
             .setSubText(if (deviceName.isNotEmpty()) deviceName else appName)
-            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .apply { if (artwork != null) setLargeIcon(artwork) }
             .setOngoing(playing)
             .setOnlyAlertOnce(true)
