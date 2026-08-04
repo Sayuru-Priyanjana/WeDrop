@@ -85,7 +85,7 @@ export function ShortcutRecorder({
       className={`rounded-xl border px-3 py-1.5 text-[12.5px] font-medium tracking-wide transition-colors ${
         recording
           ? "wd-shimmer border-brand bg-brand/10 text-brand-soft"
-          : "border-border bg-black/20 text-ink hover:border-brand/50"
+          : "border-border bg-bg text-ink hover:border-brand/50"
       }`}
     >
       {recording ? "Press keys…" : parts.length > 0 ? parts.join(" + ") : "Click to set"}

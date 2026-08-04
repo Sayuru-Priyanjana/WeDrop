@@ -285,7 +285,7 @@ export function IconPicker({ value, onChange }: { value: string; onChange: (v: s
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex h-[30px] w-12 items-center justify-center rounded-xl border border-border bg-black/20 text-ink outline-none transition-colors hover:border-border-hi focus:border-ink/20"
+        className="flex h-[30px] w-12 items-center justify-center rounded-xl border border-border bg-bg text-ink outline-none transition-colors hover:border-border-hi focus:border-ink/20"
       >
         <span className="material-symbols-outlined text-[18px] leading-none">{getIcon(value)}</span>
       </button>
