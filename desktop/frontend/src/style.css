@@ -61,8 +61,14 @@ button {
 }
 
 input,
-select {
+select,
+option {
   font-family: inherit;
+}
+
+option {
+  background-color: var(--color-surface-hi);
+  color: var(--color-ink);
 }
 
 /* A slim scrollbar that does not intrude on the dark surfaces. */

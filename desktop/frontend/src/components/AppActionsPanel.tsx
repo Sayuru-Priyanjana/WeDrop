@@ -49,7 +49,7 @@ const ACTION_TYPES: { value: string; label: string }[] = [
 
 
 const inputClass =
-  "w-full rounded-xl border border-border bg-bg-soft px-3 py-1.5 text-[13px] text-ink outline-none transition-colors focus:border-brand";
+  "w-full rounded-xl border border-border bg-black/20 px-3 py-1.5 text-[13px] text-ink outline-none transition-colors focus:border-brand";
 
 function randomPaletteColor(): number {
   const css = PALETTE[Math.floor(Math.random() * PALETTE.length)];
