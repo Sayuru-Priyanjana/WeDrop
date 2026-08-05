@@ -5,13 +5,13 @@
 !include "FileFunc.nsh"
 
 !ifndef INFO_PROJECTNAME
-    !define INFO_PROJECTNAME "desktop"
+    !define INFO_PROJECTNAME "WeDrop"
 !endif
 !ifndef INFO_COMPANYNAME
-    !define INFO_COMPANYNAME "desktop"
+    !define INFO_COMPANYNAME "WeDrop"
 !endif
 !ifndef INFO_PRODUCTNAME
-    !define INFO_PRODUCTNAME "desktop"
+    !define INFO_PRODUCTNAME "WeDrop"
 !endif
 !ifndef INFO_PRODUCTVERSION
     !define INFO_PRODUCTVERSION "1.0.0"

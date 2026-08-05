@@ -11,10 +11,16 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/getlantern/systray"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
+
+//go:embed build/windows/icon.ico
+var iconData []byte
+
+var wailsCtx context.Context
 
 func main() {
 	log.SetFlags(log.Ltime)
@@ -29,6 +35,8 @@ func main() {
 	}
 
 	service := NewWeDropService()
+
+	go systray.Run(onReady, onExit)
 
 	err := wails.Run(&options.App{
 		Title:     "WeDrop",
@@ -47,6 +55,7 @@ func main() {
 		// close really means quit.
 		HideWindowOnClose: false,
 		OnStartup: func(ctx context.Context) {
+			wailsCtx = ctx
 			service.startup(ctx)
 		},
 		OnBeforeClose: func(ctx context.Context) bool {
@@ -69,4 +78,35 @@ func main() {
 	if err != nil {
 		log.Fatalf("WeDrop could not start: %v", err)
 	}
+}
+
+func onReady() {
+	systray.SetIcon(iconData)
+	systray.SetTitle("WeDrop")
+	systray.SetTooltip("WeDrop - File Sharing")
+
+	mShow := systray.AddMenuItem("Show WeDrop", "Show the main window")
+	systray.AddSeparator()
+	mQuit := systray.AddMenuItem("Quit", "Quit WeDrop")
+
+	go func() {
+		for {
+			select {
+			case <-mShow.ClickedCh:
+				if wailsCtx != nil {
+					wailsRuntime.WindowShow(wailsCtx)
+				}
+			case <-mQuit.ClickedCh:
+				if wailsCtx != nil {
+					wailsRuntime.Quit(wailsCtx)
+				}
+				systray.Quit()
+				return
+			}
+		}
+	}()
+}
+
+func onExit() {
+	// Clean up here if necessary
 }
